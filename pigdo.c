@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <libgen.h>
+#include <string.h>
 
 #include "jigdo.h"
 
@@ -40,31 +42,52 @@ int main(int argc, const char * const * argv)
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescEntry *table = NULL;
-    int count, ret = 1;
+    int count, ret = 1, len;
+    char *jigdoFile = NULL, *jigdoDir, *templatePath;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
         goto done;
     }
 
-    fp = fopen(argv[1], "r"); // TODO support loading .jigdo from URI
+    jigdoFile = strdup(argv[1]);
+
+    // TODO support loading .jigdo file from URI and gzip compressed files
+    fp = fopen(jigdoFile, "r");
     if (!fp) {
-        fprintf(stderr, "Unable to open '%s' for reading\n", argv[1]);
+        fprintf(stderr, "Unable to open '%s' for reading\n", jigdoFile);
         goto done;
     }
 
     if (freadJigdoFile(fp, &jigdo)) {
-        printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
+	    printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
     } else {
-        fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
-        goto done;
+	    fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
+	    goto done;
     }
 
     fclose(fp);
-    fp = fopen(jigdo.templateName, "r"); // TODO resolve path relative to .jigdo
+
+    jigdoDir = dirname(jigdoFile);
+    len = strlen(jigdoDir) + strlen(jigdo.templateName) + 2 /* '/' and '\0' */;
+    templatePath = calloc(len, 1);
+    if (!templatePath) {
+        fprintf(stderr, "Failed to allocate memory for the template path.\n");
+        goto done;
+    }
+
+    // asprintf(3) would be nice, but it's not part of any standard
+    if (snprintf(templatePath, len, "%s/%s", jigdoDir, jigdo.templateName) !=
+        len - 1) {
+        fprintf(stderr, "Unexpected character count returned by snprintf\n");
+        free(templatePath);
+        goto done;
+    }
+
+    fp = fopen(templatePath, "r");
+    free(templatePath);
     if (!fp) {
-        fprintf(stderr, "Unable to open '%s' for reading\n",
-                jigdo.templateName);
+        fprintf(stderr, "Unable to open '%s' for reading\n", templatePath);
         goto done;
     }
 
@@ -103,9 +126,8 @@ done:
         fclose(fp);
     }
 
-    if (table) {
-        free(table);
-    }
+    free(jigdoFile);
+    free(table);
 
     return ret;
 }
