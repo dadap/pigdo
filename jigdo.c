@@ -1,6 +1,10 @@
+#define _POSIX_C_SOURCE 200809L // for getline(3)
+
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 #include "jigdo.h"
 
@@ -189,6 +193,204 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
                 return false;
         }
 
+    }
+
+    return true;
+}
+
+/**
+ * @brief Trim leading and trailing whitespace from @p s
+ */
+static char *trimWhitespace(char *s)
+{
+    int i;
+
+    for (i = strlen(s) - 1; i >= 0 && isspace(s[i]); i--) {
+        s[i] = '\0';
+    }
+
+    for (; *s && isspace(*s); s++);
+
+    return s;
+}
+
+/**
+ * @brief Determine whether @p line contains a <tt>key = value</tt> pair with
+ * @p keyname as the key.
+ */
+static bool isEqualKey(char *line, const char *keyName)
+{
+    if (strncmp(line, keyName, strlen(keyName)) != 0) {
+        return false;
+    }
+
+    line += strlen(keyName);
+
+    if (*line && strchr(line, '=') && (isspace(*line) || *line == '=')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * @brief Isolate the value portion of a <tt>key = value</tt> pair
+ *
+ * @note FIXME This function should be updated to handle the quoting rules
+ * described in the jigdo-file(1) manual page.
+ *
+ * @param line A string containing a <tt>key = value</tt> pair. May be modified.
+ * 
+ * @return A newly heap-allocated buffer containing a copy of the value
+ */
+static char *getEqualValue(char *line)
+{
+    char *c = strchr(line, '=');
+
+    if (c && (++c)[0]) {
+        return strdup(trimWhitespace(c));
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief locate the @c [Jigdo] section and parse its data into @p data
+ */
+static bool freadJigdoFileJigdoSection(FILE *fp, jigdoData *data)
+{
+    static const char *versionKey = "Version";
+    static const char *generatorKey = "Generator";
+    static const char *oneDotX = "1.";
+
+    bool ret = false;
+    char *line = NULL, *trimmed;
+    size_t lineLen = 81;
+    ssize_t read;
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        goto done;
+    }
+
+    line = malloc(lineLen);
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+    } while (read >= 0 && strcmp(trimmed, "[Jigdo]") != 0);
+
+    if (read < 0) {
+        goto done;
+    }
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+
+        if (isEqualKey(trimmed, versionKey)) {
+            data->version = getEqualValue(trimmed);
+        }
+
+        if (isEqualKey(trimmed, generatorKey)) {
+            data->generator = getEqualValue(trimmed);
+        }
+    } while (read >= 0 && line[0] != '[');
+
+    /* Only support format 1.x: a major version bump would signal a potentially
+     * incompatible file format change. */
+    if (data->version == NULL ||
+        strncmp(data->version, oneDotX, strlen(oneDotX)) != 0) {
+        goto done;
+    }
+
+    ret = true;
+
+done:
+    free(line);
+
+    if (!ret) {
+        free(data->version);
+        data->version = NULL;
+        free(data->generator);
+        data->generator = NULL;
+    }
+
+    return ret;
+}
+
+/**
+ * @brief Locate the @c [Image] section and parse its data into @p data
+ */
+static bool freadJigdoFileImageSection(FILE *fp, jigdoData *data)
+{
+    static const char *imageNameKey = "Filename";
+    static const char *templateNameKey = "Template";
+    static const char *templateMD5Key = "Template-MD5Sum";
+
+    bool ret = false;
+    char *line = NULL, *trimmed;
+    size_t lineLen = 81;
+    ssize_t read;
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        goto done;
+    }
+
+    line = malloc(lineLen);
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+    } while (read >= 0 && strcmp(trimmed, "[Image]") != 0);
+
+    if (read < 0) {
+        goto done;
+    }
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+
+        if (isEqualKey(trimmed, imageNameKey)) {
+            data->imageName = getEqualValue(trimmed);
+        }
+
+        if (isEqualKey(trimmed, templateNameKey)) {
+            data->templateName = getEqualValue(trimmed);
+        }
+
+        if (isEqualKey(trimmed, templateMD5Key)) {
+            // TODO: implement de-base64 of md5sums
+        }
+    } while (read >= 0 && line[0] != '[');
+
+    if (data->imageName && data->templateName) {
+        ret = true;
+    }
+
+done:
+    free(line);
+
+    if (!ret) {
+        free(data->imageName);
+        data->imageName = NULL;
+        free(data->templateName);
+        data->templateName = NULL;
+    }
+
+    return ret;
+}
+
+bool freadJigdoFile(FILE *fp, jigdoData *data)
+{
+    memset(data, 0, sizeof(*data));
+
+    if (!freadJigdoFileJigdoSection(fp, data)) {
+        return false;
+    }
+
+    if (!freadJigdoFileImageSection(fp, data)) {
+        return false;
     }
 
     return true;

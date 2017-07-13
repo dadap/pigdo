@@ -87,9 +87,32 @@ typedef struct {
 } templateDescEntry;
 
 /**
- * @brief Parse a DESC table from a template file
+ * @brief Data parsed from a @c .jigdo file
+ */
+typedef struct {
+    /* [Jigdo] section */
+    char *version;           ///< Jigdo file format version
+    char *generator;         ///< Program used to generate @c .jigdo file
+
+    /* [Image] section */
+    char *imageName;         ///< Name of reconstructed image file
+    char *templateName;      ///< Name of jigdo @c .template file
+    md5Checksum templateMD5; ///< MD5 sum of @c .template file
+    /* TODO store ShortInfo and Info? */
+
+    /* [Parts] section */
+    jigdoFileInfo *files;    ///< Files contained in the image
+    int numFiles;            ///< Count of jigdoData::files elements
+
+    /* [Servers] section */
+    server *servers;         ///< Servers where jigdoData::files can be found
+    int numServers;          ///< Count of jigdoData::servers elements
+} jigdoData;
+
+/**
+ * @brief Parse a DESC table from a @c .template file
  *
- * @param fp An open <tt>FILE *</tt> handle to a Jigdo template file.
+ * @param fp An open <tt>FILE *</tt> handle to a Jigdo @c .template file.
  * @param table A pointer to an array of @c templateDescEntry records where the
  * parsed data for the DESC table entries will be stored. @p table may be NULL,
  * in which case freadTemplateDesc() will count the number of DESC table entries
@@ -98,4 +121,21 @@ typedef struct {
  * @return @c true on success; @c false on error
  */
 bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count);
+
+/**
+ * @brief Parse data from a @c .jigdo file
+ *
+ * @note TODO currently only supports plain (i.e., not gzipped) @c .jigdo format
+ *
+ * @param fp An open <tt>FILE *</tt> handle to a @c .jigdo file.
+ * @param data A pointer to a jigdoData record where parsed data will be stored.
+ *
+ * @return @c true on success; @c false on error
+ */
+bool freadJigdoFile(FILE *fp, jigdoData *data);
+
+/**
+ * @brief Free heap-allocated members of a jigdoData record
+ */
+void freeJigdoData(jigdoData *data);
 #endif

@@ -21,20 +21,33 @@ static void printMd5Sum(md5Checksum md5)
 int main(int argc, const char * const * argv)
 {
     FILE *fp = NULL;
-    templateDescEntry *table;
+    jigdoData jigdo;
+    templateDescEntry *table = NULL;
     int count, ret = 1;
 
-    /* TODO when .jigdo processing is supported, the CLI will change to take
-     * the .jigdo file rather than the .template, and infer the .template path
-     * from the .jigdo file if the user doesn't override the .template path. */
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s template-file-name\n", argv[0]);
+        fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
         goto done;
     }
 
-    fp = fopen(argv[1], "r");
+    fp = fopen(argv[1], "r"); // TODO support loading .jigdo from URI
     if (!fp) {
         fprintf(stderr, "Unable to open '%s' for reading\n", argv[1]);
+        goto done;
+    }
+
+    if (freadJigdoFile(fp, &jigdo)) {
+        printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
+    } else {
+        fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
+        goto done;
+    }
+
+    fclose(fp);
+    fp = fopen(jigdo.templateName, "r"); // TODO resolve path relative to .jigdo
+    if (!fp) {
+        fprintf(stderr, "Unable to open '%s' for reading\n",
+                jigdo.templateName);
         goto done;
     }
 
