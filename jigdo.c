@@ -647,12 +647,23 @@ static server *getServer(jigdoData *data, const char *name)
     return data->servers + i;
 }
 
+/**
+ * @brief Compare two md5Checksum values
+ */
+static int md5Cmp(const md5Checksum *a, const md5Checksum *b)
+{
+    return memcmp(a, b, sizeof(*a));
+}
+
+/**
+ * @brief Comparator function for qsort(3) and bsearch(3) that operates on
+ * jigdoFileInfo records and compares by md5Checksum
+ */
 static int fileMD5Cmp(const void *a, const void *b)
 {
     const jigdoFileInfo *fileA = a, *fileB = b;
 
-    return memcmp(&(fileA->md5Sum.sum), &(fileB->md5Sum.sum),
-                  sizeof(fileA->md5Sum.sum));
+    return md5Cmp(&(fileA->md5Sum), &(fileB->md5Sum));;
 }
 
 /**
@@ -873,4 +884,48 @@ bool freadJigdoFile(FILE *fp, jigdoData *data)
     }
 
     return true;
+}
+
+/**
+ * @brief Locate a jigdoFileInfo record in @p data based on @key
+ *
+ * @param data The jigdoData record containing the jigdoFileInfo array to search
+ * @param key The MD5 checksum to match within @data
+ * @param numFound returns the count of matching records to the caller
+ *
+ * @return The address to the first jigdoFileInfo record in @p data that matches
+ * the MD5 checksum in @p key
+ */
+static jigdoFileInfo *findFileByMD5(const jigdoData *data,
+                                    const md5Checksum key, int *numFound)
+{
+    jigdoFileInfo keyFile, *found;
+
+    *numFound = 0;
+
+    keyFile.md5Sum = key; // keyFile is a container to make key fit fileMD5Cmp()
+
+    found = bsearch(&keyFile, data->files, data->numFiles,
+                    sizeof(data->files[0]), fileMD5Cmp);
+
+    /* The .jigdo file format supports multiple entries with identical MD5 sums:
+     * rewind to the first matching file and count the number of matches. */
+    if (found) {
+        int i;
+
+        for (i = found - data->files; i > 0; i--) {
+            if (md5Cmp(&key, &(data->files[i - 1].md5Sum)) != 0) {
+                break;
+            }
+            found--;
+        }
+
+        for (*numFound = 1; i + *numFound < data->numFiles; (*numFound)++) {
+            if (md5Cmp(&key, &(data->files[i + *numFound].md5Sum)) != 0) {
+                break;
+            }
+        }
+    }
+
+    return found;
 }
