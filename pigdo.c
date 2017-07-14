@@ -32,7 +32,7 @@ static void printMd5Sum(md5Checksum md5)
     for (i = 0; i < (sizeof(md5) / sizeof(md5.sum[0])); i++) {
         int j;
         for (j = 0; j < sizeof(md5.sum[0]); j++) {
-            printf("%x", *((uint8_t*) &md5.sum[i] + j));
+            printf("%02x", *((uint8_t*) &md5.sum[i] + j));
         }
     }
 }
