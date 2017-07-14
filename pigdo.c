@@ -60,10 +60,14 @@ int main(int argc, const char * const * argv)
     }
 
     if (freadJigdoFile(fp, &jigdo)) {
-	    printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
+            printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
+            printf("Template filename is: %s\n", jigdo.templateName);
+            printf("Template MD5 sum is: ");
+            printMd5Sum(jigdo.templateMD5);
+            printf("\n");
     } else {
-	    fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
-	    goto done;
+            fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
+            goto done;
     }
 
     fclose(fp);
