@@ -464,7 +464,7 @@ static int32_t base64To3ByteIntVal(const char *in)
         }
 
         val *= 64;
-        val += b64Symbol(table[in[i]]);
+        val += b64Symbol(table[(uint8_t) in[i]]);
     }
 
     return val;
@@ -896,6 +896,7 @@ bool freadJigdoFile(FILE *fp, jigdoData *data)
  * @return The address to the first jigdoFileInfo record in @p data that matches
  * the MD5 checksum in @p key
  */
+#if 0 /* This code will be used eventually, just not right now */
 static jigdoFileInfo *findFileByMD5(const jigdoData *data,
                                     const md5Checksum key, int *numFound)
 {
@@ -929,3 +930,4 @@ static jigdoFileInfo *findFileByMD5(const jigdoData *data,
 
     return found;
 }
+#endif

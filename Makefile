@@ -1,4 +1,4 @@
-CFLAGS += -g
+CFLAGS += -g -Wall -Werror
 
 pigdo: pigdo.o jigdo.o
 
