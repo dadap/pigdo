@@ -153,6 +153,8 @@ bool freadJigdoFile(FILE *fp, jigdoData *data);
 
 /**
  * @brief Free heap-allocated members of a jigdoData record
+ *
+ * @note TODO not implemented yet; leaks ahoy!
  */
 void freeJigdoData(jigdoData *data);
 #endif

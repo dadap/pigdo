@@ -217,10 +217,21 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
+ *
+ * @note if @p s is a heap-allocated string, the return value may point to an
+ * address within that string, so the original malloced string must be tracked
+ * separately, and the return value of trimWhitespace() should not be freed.
+ * Similarly, the return value of trimWhitespace() should not be used after
+ * a string passed as @p s has been freed.
  */
 static char *trimWhitespace(char *s)
 {
     int i;
+
+    if (s == NULL) {
+        /* Give the caller something that can be dereferenced */
+        return "";
+    }
 
     for (i = strlen(s) - 1; i >= 0 && isspace(s[i]); i--) {
         s[i] = '\0';
@@ -581,6 +592,151 @@ done:
     return ret;
 }
 
+/**
+ * @brief Advance @p fp line by line until a @c [Parts] section header is found
+ *
+ * @return true if a @c [Parts] section was found; false on error or if EOF is
+ * reached without finding a @c [Parts] section.
+ */
+static bool findPartsSection(FILE *fp)
+{
+    char *line = NULL, *trimmed;
+    size_t lineLen = 81;
+    ssize_t read;
+    bool found;
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+        found = strcmp(trimmed, "[Parts]") == 0;
+    } while (read >= 0 && !found);
+
+    free(line);
+
+    return found;
+}
+
+/**
+ * @brief Search @p for a server named @name, creating a new server if needed
+ *
+ * @return A pointer to the existing server if found, or a newly created one
+ * if not found, or NULL if an error occurred.
+ */
+static server *getServer(jigdoData *data, const char *name)
+{
+    int i;
+
+    for (i = 0; i < data->numServers; i++) {
+        if (strcmp(data->servers[i].name, name) == 0) {
+            return data->servers + i;
+        }
+    }
+
+    /* No server with that name found; create a new one */
+    data->numServers++;
+    data->servers = realloc(data->servers,
+                            sizeof(data->servers[i]) * data->numServers);
+
+    if (data->servers == NULL) {
+        return NULL;
+    }
+
+    memset(data->servers + i, 0, sizeof(data->servers[i]));
+    data->servers[i].name = strdup(name);
+
+    return data->servers + i;
+}
+
+/**
+ * @brief Locate any @c [Parts] sections and parse them into @p data
+ */
+static bool freadJigdoFilePartsSections(FILE *fp, jigdoData *data)
+{
+    char *line = NULL, *trimmed;
+    size_t lineLen = 81;
+    ssize_t read;
+    bool ret = false;
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        goto done;
+    }
+
+    /* A .jigdo file may have zero, one, or many [Parts] sections */
+    while (findPartsSection(fp)) {
+        do {
+            char *file = NULL;
+
+            read = getline(&line, &lineLen, fp);
+            trimmed = trimWhitespace(line);
+            if (strncmp(trimmed, "[", 1) == 0) {
+                /* Rewind to the previous line */
+                if (fseek(fp, -1 * read, SEEK_CUR) != 0) {
+                    goto done;
+                }
+
+                break;
+            }
+
+            /* FIXME handle comment lines that may contain '=' characters */
+
+            file = getEqualValue(line);
+            if (file) {
+                int i = data->numFiles++;
+                bool fileOK = false;
+                char *md5, *path, *server;
+
+                data->files = realloc(data->files,
+                                      sizeof(data->files[0]) * data->numFiles);
+                if (data->files == NULL) {
+                    goto fileDone;
+                }
+
+                memset(data->files + i, 0, sizeof(data->files[i]));
+
+                md5 = getKey(line, '=');
+
+                if (!md5 || !deBase64MD5Sum(trimWhitespace(md5),
+                                            &(data->files[i].md5Sum))) {
+                    goto done;
+                }
+
+                /* FIXME handle direct URIs as file location */
+                path = strdup(getValue(file, ':'));
+                if (!path) {
+                    goto fileDone;
+                }
+                data->files[i].path = path;
+
+                server = trimWhitespace(getKey(file, ':'));
+                data->files[i].server = getServer(data, server);
+
+                if (!data->files[i].server) {
+                    goto fileDone;
+                }
+
+                /* No search for local matches performed yet, so none found */
+                data->files[i].localMatch = -1;
+
+                fileOK = true;
+
+fileDone:
+                free(file);
+
+                if (!fileOK) {
+                    goto done;
+                }
+            }
+        } while (read >= 0);
+    }
+
+    ret = true;
+
+done:
+    free(line);
+
+    return ret;
+}
+
 bool freadJigdoFile(FILE *fp, jigdoData *data)
 {
     memset(data, 0, sizeof(*data));
@@ -590,6 +746,10 @@ bool freadJigdoFile(FILE *fp, jigdoData *data)
     }
 
     if (!freadJigdoFileImageSection(fp, data)) {
+        return false;
+    }
+
+    if (!freadJigdoFilePartsSections(fp, data)) {
         return false;
     }
 
