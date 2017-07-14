@@ -677,6 +677,10 @@ static bool freadJigdoFilePartsSections(FILE *fp, jigdoData *data)
                 break;
             }
 
+            if (strlen(trimmed) == 0) {
+                continue;
+            }
+
             /* FIXME handle comment lines that may contain '=' characters */
 
             file = getEqualValue(line);
@@ -737,6 +741,106 @@ done:
     return ret;
 }
 
+/**
+ * @brief Append @p mirror to the mirrors list in the server named @serverName
+ *
+ * @note This will probably be exported as part of this file's external API to
+ * support adding additional mirrors via command line or config file options.
+ */
+static bool addServerMirror(jigdoData *data, const char *serverName,
+                            const char *mirror)
+{
+    int i;
+    server *s = getServer(data, serverName);
+
+    if (!s) {
+        return false;
+    }
+
+    i = s->numMirrors++;
+    s->mirrors = realloc(s->mirrors, sizeof(s->mirrors[i]) * s->numMirrors);
+    if (!s->mirrors) {
+        return false;
+    }
+    s->mirrors[i] = strdup(mirror);
+
+    return s->mirrors[i] != NULL;
+}
+
+/**
+ * @brief Parse the @c [Servers] section out of @p fp into @p data
+ */
+static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
+{
+    bool ret = false;
+    char *line = NULL, *trimmed;
+    size_t lineLen = 81;
+    ssize_t read;
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        goto done;
+    }
+
+    line = malloc(lineLen);
+
+    do {
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+    } while (read >= 0 && strcmp(trimmed, "[Servers]") != 0);
+
+    if (read < 0) {
+        goto done;
+    }
+
+    do {
+        char *serverMirror = NULL, *serverName;
+        bool success = false;
+
+        read = getline(&line, &lineLen, fp);
+        trimmed = trimWhitespace(line);
+
+        if (strlen(trimmed) == 0) {
+            continue;
+        }
+
+        serverMirror = getEqualValue(trimmed);
+        if (!serverMirror) {
+            goto mirrorDone;
+        }
+        trimmed = trimWhitespace(serverMirror);
+
+        serverName = trimWhitespace(getKey(line, '='));
+        if (!addServerMirror(data, serverName, trimmed)) {
+            free(serverMirror);
+            goto mirrorDone;
+        }
+
+        success = true;
+mirrorDone:
+        free(serverMirror);
+
+        if (!success) {
+            goto done;
+        }
+    } while (read >= 0 && line[0] != '[');
+
+    if (data->imageName && data->templateName) {
+        ret = true;
+    }
+
+done:
+    free(line);
+
+    if (!ret) {
+        free(data->imageName);
+        data->imageName = NULL;
+        free(data->templateName);
+        data->templateName = NULL;
+    }
+
+    return ret;
+}
+
 bool freadJigdoFile(FILE *fp, jigdoData *data)
 {
     memset(data, 0, sizeof(*data));
@@ -750,6 +854,10 @@ bool freadJigdoFile(FILE *fp, jigdoData *data)
     }
 
     if (!freadJigdoFilePartsSections(fp, data)) {
+        return false;
+    }
+
+    if (!freadJigdoFileServersSection(fp, data)) {
         return false;
     }
 
