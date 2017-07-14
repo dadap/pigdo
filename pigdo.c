@@ -17,25 +17,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <libgen.h>
 #include <string.h>
+#include <assert.h>
 
 #include "jigdo.h"
-
-/**
- * @brief print a hexadecimal string representing @p md5 to stdout
- */
-static void printMd5Sum(md5Checksum md5)
-{
-    int i;
-    for (i = 0; i < (sizeof(md5) / sizeof(md5.sum[0])); i++) {
-        int j;
-        for (j = 0; j < sizeof(md5.sum[0]); j++) {
-            printf("%02x", *((uint8_t*) &md5.sum[i] + j));
-        }
-    }
-}
+#include "jigdo-template.h"
+#include "jigdo-md5.h"
 
 int main(int argc, const char * const * argv)
 {
