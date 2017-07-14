@@ -647,6 +647,14 @@ static server *getServer(jigdoData *data, const char *name)
     return data->servers + i;
 }
 
+static int fileMD5Cmp(const void *a, const void *b)
+{
+    const jigdoFileInfo *fileA = a, *fileB = b;
+
+    return memcmp(&(fileA->md5Sum.sum), &(fileB->md5Sum.sum),
+                  sizeof(fileA->md5Sum.sum));
+}
+
 /**
  * @brief Locate any @c [Parts] sections and parse them into @p data
  */
@@ -732,6 +740,9 @@ fileDone:
             }
         } while (read >= 0);
     }
+
+    /* Sort by MD5 to make it easier to find files from MD5 sums in .template */
+    qsort(data->files, data->numFiles, sizeof(data->files[0]), fileMD5Cmp);
 
     ret = true;
 
