@@ -251,21 +251,58 @@ static bool isEqualKey(char *line, const char *keyName)
 }
 
 /**
- * @brief Isolate the value portion of a <tt>key = value</tt> pair
+ * @brief Isolate the value portion of a key/value pair
  *
  * @note FIXME This function should be updated to handle the quoting rules
  * described in the jigdo-file(1) manual page.
  *
- * @param line A string containing a <tt>key = value</tt> pair. May be modified.
- * 
- * @return A newly heap-allocated buffer containing a copy of the value
+ * @param line A string containing a key/value pair. May be modified.
+ * @param delim The character that splits the key/value pair.
+ @
+ * @return A newly heap-allocated buffer containing a copy of the value, or
+ * NULL if @line is not a key/value pair, or the value is empty.
  */
-static char *getEqualValue(char *line)
+static char *getValue(char *line, char delim)
 {
-    char *c = strchr(line, '=');
+    char *c = strchr(line, delim);
 
     if (c && (++c)[0]) {
         return strdup(trimWhitespace(c));
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Wrapper around getValue() for <tt>key = value</tt> pairs
+ *
+ * key/value pairs using '=' as the delimiter are the most common key/value
+ * pairs in .jigdo files, so treat them as a special case.
+ */
+static char *getEqualValue(char *line)
+{
+    return getValue(line, '=');
+}
+
+/**
+ * @brief Isolate the key portion of a key/value pair
+ *
+ * @param line A string containing a key/value pair. May be modified.
+ * @param delim The character that splits the key/value pair.
+ *
+ * @return A pointer to the key, or NULL if @line is not a key/value pair.
+ *
+ * @note This function *will* replace any '=' character with '\0', and as such
+ * must either be run *after* getEqualValue() or any other function that depends
+ * on the contents of the @line, or else run on a disposable copy.
+ */
+static char *getKey(char *line, char delim)
+{
+    char *c = strchr(line, delim);
+
+    if (c) {
+        c[0] = '\0';
+        return trimWhitespace(line);
     }
 
     return NULL;
