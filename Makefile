@@ -1,4 +1,5 @@
 CFLAGS += -g -Wall -Werror
+LDFLAGS += -pthread
 
 pigdo: pigdo.o jigdo.o jigdo-template.o jigdo-md5.o
 

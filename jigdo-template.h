@@ -66,6 +66,17 @@ typedef struct {
 } templateFileEntry;
 
 /**
+ * @brief Flags for different possible states of a part during reassembly
+ */
+typedef enum {
+    COMMIT_STATUS_NOT_STARTED = 0, ///< This part has not been processed yet
+    COMMIT_STATUS_ASSIGNED,        ///< Assigned to a worker but not started
+    COMMIT_STATUS_IN_PROGRESS,     ///< Actively being processed
+    COMMIT_STATUS_COMPLETE,        ///< Successfully completed
+    COMMIT_STATUS_ERROR,           ///< Attempted, but an error occurred
+} commitStatus;
+
+/**
  * @brief Data parsed from a DESC table entry
  */
 typedef struct {
@@ -77,6 +88,7 @@ typedef struct {
         templateFileEntry file;
     } u;                   ///< Entry data; must access via the correct union
                            ///< member based on templateDescEntry::type.
+    commitStatus status;   ///< How far along this piece is in reconstruction
 } templateDescEntry;
 
 /**

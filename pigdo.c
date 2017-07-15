@@ -24,10 +24,16 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <pthread.h>
 
 #include "jigdo.h"
 #include "jigdo-template.h"
 #include "jigdo-md5.h"
+
+/**
+ * @brief Lock on DESC table entry management
+ */
+static pthread_mutex_t tableLock;
 
 /**
  * @brief Concatenate a directory and file name, with a '/' in between
@@ -55,16 +61,47 @@ static char *dircat(const char *dir, const char *file)
     return ret;
 }
 
+static bool partsRemain(templateDescEntry *table, int count)
+{
+    int i;
+    bool ret = false;
+
+    if (pthread_mutex_lock(&tableLock) != 0) {
+        /* Something horrible has happened; break out of the loop in main() */
+        return false;
+    }
+
+    for (i = 0; i < count; i++) {
+        if (table[i].status != COMMIT_STATUS_COMPLETE) {
+            ret = true;
+            break;
+        }
+    }
+
+    if (pthread_mutex_unlock(&tableLock) != 0) {
+        ret = false;
+    }
+
+    return ret;
+}
+
+typedef struct {
+    jigdoData *jigdo;
+    templateDescEntry *chunk;
+} workerArgs;
+
 int main(int argc, const char * const * argv)
 {
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescEntry *table = NULL;
-    int count, ret = 1, fd = -1;
+    int count, ret = 1, fd = -1, i;
     char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
     uint8_t *image = MAP_FAILED;
     size_t imageLen = 0;
     bool resize;
+    static const int numThreads = 4;
+    struct { pthread_t tid; workerArgs args; } *workerState = NULL;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
@@ -161,6 +198,26 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
+    workerState = calloc(numThreads, sizeof(workerState));
+    if (!workerState) {
+        fprintf(stderr, "Failed to allocate worker thread state\n");
+        goto done;
+    }
+
+    for (i = 0; i < numThreads; i++) {
+        workerState[i].args.jigdo = &jigdo;
+    }
+
+    if (pthread_mutex_init(&tableLock, NULL) != 0) {
+        fprintf(stderr, "Failed to initialize mutex\n");
+        goto done;
+    }
+
+    /* TODO Don't actually iterate the loop until rebuilding is implemented */
+    while (0 && partsRemain(table, count)) {
+
+    }
+
     msync(image, imageLen, MS_SYNC);
 
     ret = 0;
@@ -179,6 +236,7 @@ done:
         close(fd);
     }
 
+    free(workerState);
     free(jigdoFile);
     free(table);
 
