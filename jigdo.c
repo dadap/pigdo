@@ -78,9 +78,9 @@ static bool isEqualKey(char *line, const char *keyName)
  *
  * @param line A string containing a key/value pair. May be modified.
  * @param delim The character that splits the key/value pair.
- @
+ *
  * @return A newly heap-allocated buffer containing a copy of the value, or
- * NULL if @line is not a key/value pair, or the value is empty.
+ * NULL if @p line is not a key/value pair, or the value is empty.
  */
 static char *getValue(char *line, char delim)
 {
@@ -114,7 +114,7 @@ static char *getEqualValue(char *line)
  *
  * @note This function *will* replace any '=' character with '\0', and as such
  * must either be run *after* getEqualValue() or any other function that depends
- * on the contents of the @line, or else run on a disposable copy.
+ * on the contents of @p line, or else run on a disposable copy.
  */
 static char *getKey(char *line, char delim)
 {
@@ -288,7 +288,7 @@ static bool findPartsSection(FILE *fp)
 }
 
 /**
- * @brief Search @p for a server named @name, creating a new server if needed
+ * @brief Search @p for a server named @p name, creating a new server if needed
  *
  * @return A pointer to the existing server if found, or a newly created one
  * if not found, or NULL if an error occurred.
