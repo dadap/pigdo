@@ -20,6 +20,7 @@
 #include <libgen.h>
 #include <string.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "jigdo.h"
 #include "jigdo-template.h"
@@ -105,7 +106,7 @@ int main(int argc, const char * const * argv)
     assert(table[count-1].type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO ||
            table[count-1].type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE);
 
-    printf("Image size is: %llu bytes\n", table[count-1].u.imageInfo.size);
+    printf("Image size is: %"PRIu64" bytes\n", table[count-1].u.imageInfo.size);
     printf("Image md5sum is: ");
     printMd5Sum(table[count-1].u.imageInfo.md5Sum);
     printf("\n");
