@@ -153,6 +153,9 @@ static bool freadJigdoFileJigdoSection(FILE *fp, jigdoData *data)
         trimmed = trimWhitespace(line);
     } while (read >= 0 && strcmp(trimmed, "[Jigdo]") != 0);
 
+
+    /* XXX getline(3) may have returned negative due to e.g. a realloc(3) error,
+     * but let's be optimistic and assume it just hit EOF */
     if (read < 0) {
         goto done;
     }
@@ -217,6 +220,9 @@ static bool freadJigdoFileImageSection(FILE *fp, jigdoData *data)
         trimmed = trimWhitespace(line);
     } while (read >= 0 && strcmp(trimmed, "[Image]") != 0);
 
+
+    /* XXX getline(3) may have returned negative due to e.g. a realloc(3) error,
+     * but let's be optimistic and assume it just hit EOF */
     if (read < 0) {
         goto done;
     }
@@ -353,10 +359,6 @@ static bool freadJigdoFilePartsSections(FILE *fp, jigdoData *data)
                 break;
             }
 
-            if (strlen(trimmed) == 0) {
-                continue;
-            }
-
             /* FIXME handle comment lines that may contain '=' characters */
 
             file = getEqualValue(line);
@@ -467,6 +469,8 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
         trimmed = trimWhitespace(line);
     } while (read >= 0 && strcmp(trimmed, "[Servers]") != 0);
 
+    /* XXX getline(3) may have returned negative due to e.g. a realloc(3) error,
+     * but let's be optimistic and assume it just hit EOF */
     if (read < 0) {
         goto done;
     }
@@ -478,12 +482,17 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
         read = getline(&line, &lineLen, fp);
         trimmed = trimWhitespace(line);
 
-        if (strlen(trimmed) == 0) {
+
+        /* XXX getline(3) may have returned negative due to e.g. a realloc(3)
+         * error, but let's be optimistic and assume it just hit EOF */
+        if (read < 0) {
             continue;
         }
 
         serverMirror = getEqualValue(trimmed);
         if (!serverMirror) {
+            /* This line contains no server: clean up and continue loop */
+            success = true;
             goto mirrorDone;
         }
         trimmed = trimWhitespace(serverMirror);
