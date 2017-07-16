@@ -28,4 +28,13 @@
  */
 char *dircat(const char *dir, const char *file);
 
+/**
+ * @brief get the offset of @p offset within its page
+ */
+off_t pagemod(off_t offset);
+
+/**
+ * @brief get a page-aligned starting address for @p offset
+ */
+off_t pagebase(off_t offset);
 #endif

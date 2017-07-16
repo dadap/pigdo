@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 char *dircat(const char *dir, const char *file)
 {
@@ -35,4 +36,14 @@ char *dircat(const char *dir, const char *file)
     }
 
     return ret;
+}
+
+off_t pagemod(off_t offset)
+{
+    return offset % getpagesize();
+}
+
+off_t pagebase(off_t offset)
+{
+    return offset - pagemod(offset);
 }

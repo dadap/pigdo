@@ -167,7 +167,7 @@ static void setStatus(templateDescEntry *chunk, commitStatus status)
 typedef struct {
     jigdoData *jigdo;         ///< Pointer to the parsed jigdo data
     templateDescEntry *chunk; ///< Pointer to the chunk this worker will work on
-    void *out;                ///< Pointer to the output buffer
+    int outFd;                ///< Pointer to the output buffer
 } workerArgs;
 
 /**
@@ -179,24 +179,38 @@ static void *fetch_worker(void *args)
     char *uri = md5ToURI(a->jigdo, a->chunk->u.file.md5Sum);
 
     if (uri) {
+        void *out;
         size_t fetched;
         if (pthread_mutex_lock(&printLock) != 0) {
             setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+            return NULL;
         }
         printf("Downloading %s...\n", uri);
         fflush(stdout);
         if (pthread_mutex_unlock(&printLock) != 0) {
             setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+            return NULL;
+        }
+
+        out = mmap(NULL, a->chunk->u.file.size + pagemod(a->chunk->offset),
+                   PROT_READ | PROT_WRITE, MAP_SHARED, a->outFd,
+                   pagebase(a->chunk->offset));
+        if (out == MAP_FAILED) {
+            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+            return NULL;
         }
 
         setStatus(a->chunk, COMMIT_STATUS_IN_PROGRESS);
-        fetched = fetch(uri, a->out + a->chunk->offset, a->chunk->u.file.size);
-
+        fetched = fetch(uri, out + pagemod(a->chunk->offset),
+                        a->chunk->u.file.size);
 
         if (pthread_mutex_lock(&printLock) != 0) {
             setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+            return NULL;
         }
         if (fetched == a->chunk->u.file.size) {
+            msync(out, a->chunk->u.file.size, MS_SYNC);
+            munmap(out, a->chunk->u.file.size);
             setStatus(a->chunk, COMMIT_STATUS_COMPLETE);
             printf("%s done!\n", uri);
             fflush(stdout);
@@ -222,8 +236,7 @@ int main(int argc, const char * const * argv)
     templateDescEntry *table = NULL;
     int count, ret = 1, fd = -1, i, contiguousComplete;
     char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
-    uint8_t *image = MAP_FAILED;
-    size_t imageLen = 0;
+    uint64_t imageLen;
     bool resize;
     static const int numThreads = 16;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
@@ -293,7 +306,7 @@ int main(int argc, const char * const * argv)
            table[count-1].type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE);
 
     imageLen = table[count-1].u.imageInfo.size;
-    printf("Image size is: %"PRIu64" bytes\n", table[count-1].u.imageInfo.size);
+    printf("Image size is: %"PRIu64" bytes\n", imageLen);
     printf("Image md5sum is: ");
     printMd5Sum(table[count-1].u.imageInfo.md5Sum);
     printf("\n");
@@ -317,13 +330,7 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    image = mmap(NULL, imageLen, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (image == MAP_FAILED) {
-        fprintf(stderr, "Failed to map image file into memory\n");
-        goto done;
-    }
-
-    if (!writeDataFromTemplate(fp, image, imageLen, table, count)) {
+    if (!writeDataFromTemplate(fp, fd, table, count)) {
         goto done;
     }
 
@@ -335,7 +342,8 @@ int main(int argc, const char * const * argv)
 
     for (i = 0; i < numThreads; i++) {
         workerState[i].args.jigdo = &jigdo;
-        workerState[i].args.out = image;
+        // XXX sharing fd between threads probably kills kittens
+        workerState[i].args.outFd = fd;
     }
 
     if (pthread_mutex_init(&tableLock, NULL) != 0 ||
@@ -383,11 +391,10 @@ int main(int argc, const char * const * argv)
                 }
             }
         }
+        usleep(123456); // No need to keep the CPU spinning in a tight loop
     }
 
     fetch_cleanup();
-
-    msync(image, imageLen, MS_SYNC);
 
     ret = 0;
 
@@ -395,10 +402,6 @@ done:
     /* Clean up */
     if (fp) {
         fclose(fp);
-    }
-
-    if (image != MAP_FAILED) {
-        munmap(image, imageLen);
     }
 
     if (fd >= 0) {

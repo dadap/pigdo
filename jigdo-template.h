@@ -110,12 +110,11 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count);
  * @brief Decompress the data stream from the @c .template and write it out
  *
  * @param fp An open <tt>FILE *</tt> handle to a jigdo @c .template file.
- * @param out Output buffer, ideally mmaped from the output file
- * @param outSize size of the output buffer
+ * @param out An open file descriptor to the output file.
  * @param table Table of data/file parts from the @c .template DESC table
  * @param count number of entries in @p table
  */
-bool writeDataFromTemplate(FILE *fp, void *out, size_t outSize,
-                           templateDescEntry *table, int count);
+bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
+                           int count);
 
 #endif

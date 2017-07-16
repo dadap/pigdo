@@ -18,9 +18,12 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <errno.h>
 
 #include "jigdo-template.h"
 #include "decompress.h"
+#include "util.h"
 
 /*@
  * @brief Container for the 6-byte little endian ints used in the @c .template
@@ -350,8 +353,8 @@ static ssize_t decompressDataPart(FILE *fp, void *out, size_t avail)
     return ret;
 }
 
-bool writeDataFromTemplate(FILE *fp, void *out, size_t outSize,
-                           templateDescEntry *table, int count)
+bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
+                           int count)
 {
     int i;
     size_t totalDecompressedSize = 0, doneSize = 0, copiedSize = 0;
@@ -369,6 +372,10 @@ bool writeDataFromTemplate(FILE *fp, void *out, size_t outSize,
         if (table[i].type == TEMPLATE_ENTRY_TYPE_DATA) {
             totalDecompressedSize += table[i].u.data.size;
         }
+    }
+
+    if (totalDecompressedSize > table[count-1].u.imageInfo.size) {
+        goto done;
     }
 
     decompressed = malloc(totalDecompressedSize);
@@ -391,19 +398,28 @@ bool writeDataFromTemplate(FILE *fp, void *out, size_t outSize,
     /* Find all of the data part entries from the DESC table and copy the
      * corresponding bytes into the file mapping. */
     for (i = 0; i < count; i++) {
+        void *out;
+
         if (table[i].type != TEMPLATE_ENTRY_TYPE_DATA) {
             continue;
         }
 
         /* Bounds checking in case of a corrupted or malicious .template */
-        if (copiedSize + table[i].u.data.size > totalDecompressedSize ||
-            table[i].offset + table[i].u.data.size > outSize) {
+        if (copiedSize + table[i].u.data.size > totalDecompressedSize) {
             goto done;
         }
 
-        memcpy(out + table[i].offset, decompressed + copiedSize,
+        out = mmap(NULL, table[i].u.data.size + pagemod(table[i].offset),
+                   PROT_READ | PROT_WRITE, MAP_SHARED, outFd,
+                   pagebase(table[i].offset));
+        if (out == MAP_FAILED) {
+            goto done;
+        }
+        memcpy(out + pagemod(table[i].offset), decompressed + copiedSize,
                table[i].u.data.size);
         copiedSize += table[i].u.data.size;
+        msync(out, table[i].u.data.size, MS_ASYNC);
+        munmap(out, table[i].u.data.size);
 
         table[i].status = COMMIT_STATUS_COMPLETE;
     }
