@@ -92,6 +92,15 @@ ssize_t fetch(const char *uri, void *out, size_t outBytes)
         goto done;
     }
 
+    /* Time out the transfer if it averages < 1KB/s for > 60 seconds */
+    if (curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60) != CURLE_OK) {
+        goto done;
+    }
+
+    if (curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024) != CURLE_OK) {
+        goto done;
+    }
+
     info.base = out;
     info.written = 0;
     info.capacity = outBytes;
