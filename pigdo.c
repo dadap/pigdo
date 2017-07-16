@@ -29,78 +29,203 @@
 #include "jigdo.h"
 #include "jigdo-template.h"
 #include "jigdo-md5.h"
+#include "fetch.h"
+#include "util.h"
+
+static pthread_mutex_t tableLock; ///< @brief Lock on DESC table management
+static pthread_mutex_t printLock; ///< @brief Lock on stdout/stderr
 
 /**
- * @brief Lock on DESC table entry management
- */
-static pthread_mutex_t tableLock;
-
-/**
- * @brief Concatenate a directory and file name, with a '/' in between
+ * @brief Determine whether any parts still need to be fetched
  *
- * @param dir The name of the directory
- * @param dir The name of the file
- *
- * @return @c dir/file on success, or NULL on error
+ * @return 0 if all parts are complete, positive if parts still need to be
+ *           fetched, and negative if an unrecoverable error occurred.
  */
-static char *dircat(const char *dir, const char *file)
-{
-    char *ret;
-    int len = strlen(dir) + strlen(file) + 2 /* '/' and '\0' */;
-
-    ret = calloc(len, 1);
-
-    if (ret) {
-        // asprintf(3) would be nice, but it's not part of any standard
-        if (snprintf(ret, len, "%s/%s", dir, file) != len - 1) {
-            free(ret);
-            ret = NULL;
-        }
-    }
-
-    return ret;
-}
-
-static bool partsRemain(templateDescEntry *table, int count)
+static int partsRemain(templateDescEntry *table, int count, int *beginComplete)
 {
     int i;
-    bool ret = false;
+    bool ret = 0;
 
     if (pthread_mutex_lock(&tableLock) != 0) {
         /* Something horrible has happened; break out of the loop in main() */
-        return false;
+        return -1;
     }
 
-    for (i = 0; i < count; i++) {
-        if (table[i].status != COMMIT_STATUS_COMPLETE) {
-            ret = true;
+    for (i = *beginComplete; i < count - 1; i++) {
+        bool breakLoop = false;
+
+        switch(table[i].status) {
+            case COMMIT_STATUS_FATAL_ERROR:
+                ret = -1;
+                breakLoop = true;
+            break;
+
+            case COMMIT_STATUS_COMPLETE:
+                *beginComplete = i;
+            break;
+
+            default:
+                ret = 1;
+                breakLoop = true;
+            break;
+        }
+
+        if (breakLoop) {
             break;
         }
     }
 
     if (pthread_mutex_unlock(&tableLock) != 0) {
-        ret = false;
+        ret = -1;
     }
 
     return ret;
 }
 
+/**
+ * @brief Retrieve the commitStatus of @p chunk
+ */
+static commitStatus getStatus(templateDescEntry *chunk)
+{
+    commitStatus status;
+
+    if (pthread_mutex_lock(&tableLock) != 0) {
+        chunk->status = COMMIT_STATUS_FATAL_ERROR;
+        return COMMIT_STATUS_FATAL_ERROR;
+    }
+
+    status = chunk->status;
+
+    if (pthread_mutex_unlock(&tableLock) != 0) {
+        chunk->status = COMMIT_STATUS_FATAL_ERROR;
+    }
+
+    return status;
+}
+
+/**
+ * @brief Determine whether @p chunk is eligible to be assigned to a worker
+ *
+ * @note The caller must take the tableLock mutex before calling in.
+ */
+static bool isWaitingFileNoMutex(templateDescEntry *chunk)
+{
+    return ((chunk->type == TEMPLATE_ENTRY_TYPE_FILE ||
+             chunk->type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) &&
+            (chunk->status == COMMIT_STATUS_NOT_STARTED ||
+             chunk->status == COMMIT_STATUS_ERROR));
+}
+
+/**
+ * @brief Scan @p table for the next unfetched chunk
+ */
+static templateDescEntry *selectChunk(templateDescEntry *table, int count)
+{
+    int i;
+
+    if (pthread_mutex_lock(&tableLock) != 0) {
+        return NULL;
+    }
+
+    /* Searching for the next available file and assigning it should happen
+     * atomically, so don't release tableLock until assigned. */
+    for (i = 0; i < count - 1 && !isWaitingFileNoMutex(table + i); i++);
+
+    table[i].status = COMMIT_STATUS_ASSIGNED;
+
+    if (pthread_mutex_unlock(&tableLock) != 0) {
+        return NULL;
+    }
+
+    if (i == count) {
+        return NULL; // Not an error; we've just reached the end.
+    }
+
+    return table + i;
+}
+
+/**
+ * @brief Assign @p status to @p chunk
+ */
+static void setStatus(templateDescEntry *chunk, commitStatus status)
+{
+    if (pthread_mutex_lock(&tableLock) != 0) {
+        chunk->status = COMMIT_STATUS_FATAL_ERROR;
+        return;
+    }
+
+    chunk->status = status;
+
+    if (pthread_mutex_unlock(&tableLock) != 0) {
+        chunk->status = COMMIT_STATUS_FATAL_ERROR;
+    }
+}
+
+/**
+ * @brief Arguments for the worker thread
+ */
 typedef struct {
-    jigdoData *jigdo;
-    templateDescEntry *chunk;
+    jigdoData *jigdo;         ///< Pointer to the parsed jigdo data
+    templateDescEntry *chunk; ///< Pointer to the chunk this worker will work on
+    void *out;                ///< Pointer to the output buffer
 } workerArgs;
+
+/**
+ * @brief Worker thread to wrap around fetch()
+ */
+static void *fetch_worker(void *args)
+{
+    workerArgs *a = (workerArgs *) args;
+    char *uri = md5ToURI(a->jigdo, a->chunk->u.file.md5Sum);
+
+    if (uri) {
+        size_t fetched;
+        if (pthread_mutex_lock(&printLock) != 0) {
+            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+        }
+        printf("Downloading %s...\n", uri);
+        fflush(stdout);
+        if (pthread_mutex_unlock(&printLock) != 0) {
+            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+        }
+
+        setStatus(a->chunk, COMMIT_STATUS_IN_PROGRESS);
+        fetched = fetch(uri, a->out + a->chunk->offset, a->chunk->u.file.size);
+
+
+        if (pthread_mutex_lock(&printLock) != 0) {
+            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+        }
+        if (fetched == a->chunk->u.file.size) {
+            setStatus(a->chunk, COMMIT_STATUS_COMPLETE);
+            printf("%s done!\n", uri);
+            fflush(stdout);
+        } else {
+            fprintf(stderr, "%s error!\n", uri);
+            setStatus(a->chunk, COMMIT_STATUS_ERROR);
+            fflush(stderr);
+        }
+        if (pthread_mutex_unlock(&printLock) != 0) {
+            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+        }
+    } else {
+        setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
+    }
+
+    return NULL;
+}
 
 int main(int argc, const char * const * argv)
 {
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescEntry *table = NULL;
-    int count, ret = 1, fd = -1, i;
+    int count, ret = 1, fd = -1, i, contiguousComplete;
     char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
     uint8_t *image = MAP_FAILED;
     size_t imageLen = 0;
     bool resize;
-    static const int numThreads = 4;
+    static const int numThreads = 16;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
 
     if (argc < 2) {
@@ -182,7 +307,7 @@ int main(int argc, const char * const * argv)
     }
 
 #if __APPLE__
-    /* Poor man's fallocate(2) - much slower than the real thing */
+    /* Poor man's fallocate(2) for Mac OS X - much slower than the real thing */
     resize = (pwrite(fd, "\0", 1, imageLen-1) == 1);
 #else
     resize = (posix_fallocate(fd, 0, imageLen) == 0);
@@ -202,7 +327,7 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    workerState = calloc(numThreads, sizeof(workerState));
+    workerState = calloc(numThreads, sizeof(workerState[0]));
     if (!workerState) {
         fprintf(stderr, "Failed to allocate worker thread state\n");
         goto done;
@@ -210,17 +335,57 @@ int main(int argc, const char * const * argv)
 
     for (i = 0; i < numThreads; i++) {
         workerState[i].args.jigdo = &jigdo;
+        workerState[i].args.out = image;
     }
 
-    if (pthread_mutex_init(&tableLock, NULL) != 0) {
+    if (pthread_mutex_init(&tableLock, NULL) != 0 ||
+        pthread_mutex_init(&printLock, NULL) != 0) {
         fprintf(stderr, "Failed to initialize mutex\n");
         goto done;
     }
 
-    /* TODO Don't actually iterate the loop until rebuilding is implemented */
-    while (0 && partsRemain(table, count)) {
-
+    if (!fetch_init()) {
+        goto done;
     }
+
+    contiguousComplete = 0;
+
+    /* XXX this will hang if more files error out than there are threads, and
+     * do not succeed upon retry. Should implement max retries limit, perhaps
+     * after exhaustively searching all mirror possibilities. */
+    while (partsRemain(table, count, &contiguousComplete) > 0) {
+        for (i = 0; i < numThreads; i++) {
+            commitStatus status = COMMIT_STATUS_NOT_STARTED;
+
+            if (workerState[i].args.chunk) {
+                status = getStatus(workerState[i].args.chunk);
+            }
+
+            if (workerState[i].args.chunk == NULL ||
+                status == COMMIT_STATUS_COMPLETE ||
+                status == COMMIT_STATUS_ERROR) {
+
+                if (workerState[i].args.chunk) {
+                    if (pthread_join(workerState[i].tid, NULL) != 0) {
+                        goto done;
+                    }
+                }
+
+                workerState[i].args.chunk = selectChunk(table, count);
+
+                if (!workerState[i].args.chunk) {
+                    break;
+                }
+
+                if (pthread_create(&(workerState[i].tid), NULL, fetch_worker,
+                                   &(workerState[i].args)) != 0) {
+                    goto done;
+                }
+            }
+        }
+    }
+
+    fetch_cleanup();
 
     msync(image, imageLen, MS_SYNC);
 

@@ -23,6 +23,7 @@
 #include <assert.h>
 
 #include "jigdo.h"
+#include "util.h"
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
@@ -476,7 +477,7 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
     }
 
     do {
-        char *serverMirror = NULL, *serverName;
+        char *serverMirror = NULL, *serverName, *c;
         bool success = false;
 
         read = getline(&line, &lineLen, fp);
@@ -496,6 +497,10 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
             goto mirrorDone;
         }
         trimmed = trimWhitespace(serverMirror);
+
+        // XXX nuke args like --try-last until quoting support is added
+        c = strchr(trimmed, ' ');
+        if (c) *c = 0;
 
         serverName = trimWhitespace(getKey(line, '='));
         if (!addServerMirror(data, serverName, trimmed)) {
@@ -562,9 +567,8 @@ bool freadJigdoFile(FILE *fp, jigdoData *data)
  * @return The address to the first jigdoFileInfo record in @p data that matches
  * the MD5 checksum in @p key
  */
-#if 0 /* This code will be used eventually, just not right now */
 static jigdoFileInfo *findFileByMD5(const jigdoData *data,
-                                    const md5Checksum key, int *numFound)
+                                    md5Checksum key, int *numFound)
 {
     jigdoFileInfo keyFile, *found;
 
@@ -596,4 +600,33 @@ static jigdoFileInfo *findFileByMD5(const jigdoData *data,
 
     return found;
 }
-#endif
+
+/**
+ * @brief Choose a mirror where @p file can be found
+ *
+ * @return The name of a mirror where @p file should be available
+ */
+static char *selectMirror(const jigdoFileInfo *file)
+{
+    // TODO should probably keep track of mirror performance and prioritize
+    // faster ones, and also honor things like --try-last
+    return file->server->mirrors[rand() % file->server->numMirrors];
+}
+
+char *md5ToURI(jigdoData *data, md5Checksum md5)
+{
+    char *mirror;
+    int numFound;
+    jigdoFileInfo *fileInfo = findFileByMD5(data, md5, &numFound);
+
+    if (numFound == 0) {
+        return NULL;
+    }
+
+    mirror = selectMirror(fileInfo);
+    if (!mirror) {
+        return NULL;
+    }
+
+    return dircat(mirror, fileInfo->path);
+}

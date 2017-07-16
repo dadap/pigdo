@@ -75,6 +75,7 @@ typedef enum {
     COMMIT_STATUS_IN_PROGRESS,     ///< Actively being processed
     COMMIT_STATUS_COMPLETE,        ///< Successfully completed
     COMMIT_STATUS_ERROR,           ///< Attempted, but an error occurred
+    COMMIT_STATUS_FATAL_ERROR,     ///< An error occurred, will not retry
 } commitStatus;
 
 /**

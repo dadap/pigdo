@@ -87,4 +87,15 @@ bool freadJigdoFile(FILE *fp, jigdoData *data);
  * @note TODO not implemented yet; leaks ahoy!
  */
 void freeJigdoData(jigdoData *data);
+
+/**
+ * @brief Get a URI where the file identified by @p md5 can be fetched
+ *
+ * @param data Parsed data from the @c .jigdo file
+ * @param md5 The checksum to match
+ *
+ * @return A URI for fetching a file matching @p md5, or NULL if not found or
+ *         an error occurred.
+ */
+char *md5ToURI(jigdoData *data, md5Checksum md5);
 #endif
