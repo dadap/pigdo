@@ -51,7 +51,8 @@ typedef struct {
  * @brief data parsed from a DESC table entry for unmatched data
  */
 typedef struct {
-    uint64_t size; ///< Uncompressed length of the data block
+    uint64_t size;         ///< Uncompressed length of the data block
+    uint64_t partialWrite; ///< Data written so far during reconstruction
 } templateDataEntry;
 
 /**
@@ -103,5 +104,17 @@ typedef struct {
  * @return @c true on success; @c false on error
  */
 bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count);
+
+/**
+ * @brief Decompress the data stream from the @c .template and write it out
+ *
+ * @param fp An open <tt>FILE *</tt> handle to a jigdo @c .template file.
+ * @param out Output buffer, ideally mmaped from the output file
+ * @param outSize size of the output buffer
+ * @param table Table of data/file parts from the @c .template DESC table
+ * @param count number of entries in @p table
+ */
+bool writeDataFromTemplate(FILE *fp, void *out, size_t outSize,
+                           templateDescEntry *table, int count);
 
 #endif

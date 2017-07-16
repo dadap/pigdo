@@ -1,7 +1,7 @@
 CFLAGS += -g -Wall -Werror
-LDFLAGS += -pthread
+LDFLAGS += -pthread -lz -lbz2
 
-pigdo: pigdo.o jigdo.o jigdo-template.o jigdo-md5.o
+pigdo: pigdo.o jigdo.o jigdo-template.o jigdo-md5.o decompress.o
 
 .PHONY: clean docs
 

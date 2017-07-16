@@ -198,6 +198,10 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
+    if (!writeDataFromTemplate(fp, image, imageLen, table, count)) {
+        goto done;
+    }
+
     workerState = calloc(numThreads, sizeof(workerState));
     if (!workerState) {
         fprintf(stderr, "Failed to allocate worker thread state\n");
