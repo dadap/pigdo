@@ -171,6 +171,15 @@ typedef struct {
 } workerArgs;
 
 /**
+ * @brief Verify the MD5 checksum of @p chunk at @buf
+ */
+static bool verifyChunkMD5(const void *buf, const templateDescEntry *chunk)
+{
+    md5Checksum md5 = md5MemOneShot(buf, chunk->u.file.size);
+    return md5Cmp(&md5, &(chunk->u.file.md5Sum)) == 0;
+}
+
+/**
  * @brief Worker thread to wrap around fetch()
  */
 static void *fetch_worker(void *args)
@@ -208,7 +217,8 @@ static void *fetch_worker(void *args)
             setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
             return NULL;
         }
-        if (fetched == a->chunk->u.file.size) {
+        if (fetched == a->chunk->u.file.size &&
+            verifyChunkMD5(out + pagemod(a->chunk->offset), a->chunk)) {
             msync(out, a->chunk->u.file.size, MS_SYNC);
             munmap(out, a->chunk->u.file.size);
             setStatus(a->chunk, COMMIT_STATUS_COMPLETE);

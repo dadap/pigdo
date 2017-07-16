@@ -53,4 +53,13 @@ int md5Cmp(const md5Checksum *a, const md5Checksum *b);
  */
 void printMd5Sum(md5Checksum md5);
 
+/**
+ * @brief compute an MD5 checksum from memory region
+ *
+ * @param in The starting address to checksum
+ * @param len The number of bytes to checksum
+ *
+ * @return The computer MD5 checksum
+ */
+md5Checksum md5MemOneShot(const void *in, size_t len);
 #endif

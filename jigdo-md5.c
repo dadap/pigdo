@@ -20,6 +20,7 @@
 #include <assert.h>
 
 #include "jigdo-md5.h"
+#include "md5.h"
 
 /**
  * @brief tests whether a base64 symbol has been flagged as valid in the table
@@ -171,4 +172,16 @@ void printMd5Sum(md5Checksum md5)
             printf("%02x", *((uint8_t*) &md5.sum[i] + j));
         }
     }
+}
+
+md5Checksum md5MemOneShot(const void *in, size_t len)
+{
+    struct MD5Context ctx;
+    md5Checksum ret;
+
+    MD5Init(&ctx);
+    MD5Update(&ctx, in, len);
+    MD5Final(&ret, &ctx);
+
+    return ret;
 }
