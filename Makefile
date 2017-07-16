@@ -1,5 +1,5 @@
-CFLAGS += -g -Wall -Werror
-LDFLAGS += -pthread -lz -lbz2 -lcurl
+CFLAGS += -g -Wall -Werror -I/usr/local/include
+LDFLAGS += -pthread -lz -lbz2 -lcurl -L/usr/local/lib
 
 pigdo: pigdo.o jigdo.o jigdo-template.o jigdo-md5.o decompress.o fetch.o util.o
 
