@@ -403,7 +403,7 @@ int main(int argc, const char * const * argv)
     contiguousComplete = 0;
 
     printf("\nNeed to fetch %d files (%zu kBytes total).\n",
-           count, fileBytes / 1024);
+           numFiles, fileBytes / 1024);
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
