@@ -33,7 +33,6 @@
 #include "util.h"
 
 static pthread_mutex_t tableLock; ///< @brief Lock on DESC table management
-static pthread_mutex_t printLock; ///< @brief Lock on stdout/stderr
 
 /**
  * @brief Determine whether any parts still need to be fetched
@@ -80,6 +79,68 @@ static int partsRemain(templateDescEntry *table, int count, int *beginComplete)
     }
 
     return ret;
+}
+
+/**
+ * @brief Count the number of @c TEMPLATE_ENTRY_TYPE_FILE* entries in @p table
+ *
+ * @param fileBytes If non-NULL, will store the total size of the files
+ */
+static int countFiles(templateDescEntry *table, int count, size_t *fileBytes)
+{
+    int i, numFiles;
+
+    if (fileBytes) {
+        *fileBytes = 0;
+    }
+
+    for (i = numFiles = 0; i < count; i++) {
+        if (table[i].type == TEMPLATE_ENTRY_TYPE_FILE ||
+            table[i].type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) {
+            numFiles++;
+            if (fileBytes) {
+                *fileBytes += table[i].u.file.size;
+            }
+        }
+    }
+
+    return numFiles;
+}
+
+/**
+ * @brief Count the number of completed files in @p table
+ *
+ * @return number of completed files, or -1 on error
+ */
+static int countCompletedFiles(templateDescEntry *table, int count,
+                               size_t *completedBytes)
+{
+    int i, numCompleted;
+
+    if (completedBytes) {
+        *completedBytes = 0;
+    }
+
+    if (pthread_mutex_lock(&tableLock) != 0) {
+        return -1;
+    }
+
+    for (i = numCompleted = 0; i < count; i++) {
+        if((table[i].type == TEMPLATE_ENTRY_TYPE_FILE ||
+            table[i].type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) &&
+           table[i].status == COMMIT_STATUS_COMPLETE) {
+            numCompleted++;
+            if (completedBytes) {
+                *completedBytes += table[i].u.file.size;
+            }
+        }
+    }
+
+    if (pthread_mutex_unlock(&tableLock) != 0) {
+        return -1;
+    }
+
+    return numCompleted;
 }
 
 /**
@@ -190,16 +251,6 @@ static void *fetch_worker(void *args)
     if (uri) {
         void *out;
         size_t fetched;
-        if (pthread_mutex_lock(&printLock) != 0) {
-            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
-            return NULL;
-        }
-        printf("Downloading %s...\n", uri);
-        fflush(stdout);
-        if (pthread_mutex_unlock(&printLock) != 0) {
-            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
-            return NULL;
-        }
 
         out = mmap(NULL, a->chunk->u.file.size + pagemod(a->chunk->offset),
                    PROT_READ | PROT_WRITE, MAP_SHARED, a->outFd,
@@ -213,24 +264,13 @@ static void *fetch_worker(void *args)
         fetched = fetch(uri, out + pagemod(a->chunk->offset),
                         a->chunk->u.file.size);
 
-        if (pthread_mutex_lock(&printLock) != 0) {
-            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
-            return NULL;
-        }
         if (fetched == a->chunk->u.file.size &&
             verifyChunkMD5(out + pagemod(a->chunk->offset), a->chunk)) {
             msync(out, a->chunk->u.file.size, MS_SYNC);
             munmap(out, a->chunk->u.file.size);
             setStatus(a->chunk, COMMIT_STATUS_COMPLETE);
-            printf("%s done!\n", uri);
-            fflush(stdout);
         } else {
-            fprintf(stderr, "%s error!\n", uri);
             setStatus(a->chunk, COMMIT_STATUS_ERROR);
-            fflush(stderr);
-        }
-        if (pthread_mutex_unlock(&printLock) != 0) {
-            setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
         }
     } else {
         setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
@@ -244,7 +284,9 @@ int main(int argc, const char * const * argv)
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescEntry *table = NULL;
-    int count, ret = 1, fd = -1, i, contiguousComplete;
+    int count, ret = 1, fd = -1, i, contiguousComplete, numFiles,
+        completedFiles = -1;
+    size_t fileBytes;
     char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
     uint64_t imageLen;
     bool resize;
@@ -357,8 +399,7 @@ int main(int argc, const char * const * argv)
         workerState[i].args.outFd = fd;
     }
 
-    if (pthread_mutex_init(&tableLock, NULL) != 0 ||
-        pthread_mutex_init(&printLock, NULL) != 0) {
+    if (pthread_mutex_init(&tableLock, NULL) != 0) {
         fprintf(stderr, "Failed to initialize mutex\n");
         goto done;
     }
@@ -367,14 +408,30 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
+    numFiles = countFiles(table, count, &fileBytes);
     contiguousComplete = 0;
+
+    printf("\nNeed to fetch %d files (%zu kBytes total).\n",
+           count, fileBytes / 1024);
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
      * after exhaustively searching all mirror possibilities. */
     while (partsRemain(table, count, &contiguousComplete) > 0) {
         for (i = 0; i < numThreads; i++) {
+            size_t bytes;
             commitStatus status = COMMIT_STATUS_NOT_STARTED;
+            int newCompletedFiles = countCompletedFiles(table, count, &bytes);
+
+            /* Only print the file count if it's changed to avoid excessive
+             * spam in case \r doesn't work as intended. */
+            if (completedFiles != newCompletedFiles) {
+                completedFiles = newCompletedFiles;
+                printf("Downloading files... %d of %d files "
+                       "(%zu/%zu kB) complete.            \r", completedFiles,
+                       numFiles, bytes / 1024, fileBytes / 1024);
+                fflush(stdout);
+            }
 
             if (workerState[i].args.chunk) {
                 status = getStatus(workerState[i].args.chunk);
