@@ -27,18 +27,12 @@
  *
  * API is the same as decompressMemToMem(), but without the type argument.
  */
-static int bunzip2MemToMem(void *in, ssize_t inBytes, void **out,
-                           size_t *outBytes, bool resize)
+static int bunzip2MemToMem(void *in, ssize_t inBytes, void *out,
+                           size_t outBytes)
 {
-    unsigned int written = *outBytes;
+    unsigned int written = outBytes;
 
-    /* Only one-shot decompression supported for now */
-    if (inBytes < 0 || resize) {
-        return -1;
-    }
-
-    if (BZ2_bzBuffToBuffDecompress(*out, &written, in, inBytes, 0, 0) ==
-        BZ_OK) {
+    if (BZ2_bzBuffToBuffDecompress(out, &written, in, inBytes, 0, 0) == BZ_OK) {
         return written;
     }
 
@@ -51,23 +45,17 @@ static int bunzip2MemToMem(void *in, ssize_t inBytes, void **out,
  * API is the same as decompressMemToMem(), but without the type argument.
  * The silly name is partially because "inflate" was already taken
  */
-static int infl8(void *in, ssize_t inBytes, void **out, size_t *outBytes,
-                 bool resize)
+static int infl8(void *in, ssize_t inBytes, void *out, size_t outBytes)
 {
     bool success = false;
     z_stream z;
-
-    /* Only one-shot decompression supported for now */
-    if (inBytes < 0 || resize) {
-        return -1;
-    }
 
     memset(&z, 0, sizeof(z));
 
     z.next_in = in;
     z.avail_in = inBytes;
-    z.next_out = *out;
-    z.avail_out = *outBytes;
+    z.next_out = out;
+    z.avail_out = outBytes;
 
     if (inflateInit(&z) != Z_OK) {
         goto done;
@@ -89,15 +77,14 @@ done:
 }
 
 int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
-                        void **out, size_t *outBytes, bool resize)
+                       void *out, size_t outBytes)
 {
     switch (type) {
         case COMPRESSED_DATA_ZLIB:
-            return infl8(in, inBytes, out, outBytes, resize);
-            break;
+            return infl8(in, inBytes, out, outBytes);
 
         case COMPRESSED_DATA_BZIP2:
-            return bunzip2MemToMem(in, inBytes, out, outBytes, resize);
+            return bunzip2MemToMem(in, inBytes, out, outBytes);
 
         case COMPRESSED_DATA_GZIP:    // Not implemented, try gunzopen() instead
         case COMPRESSED_DATA_UNKNOWN:

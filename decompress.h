@@ -37,20 +37,14 @@ typedef enum {
  *
  * @param type Compression algorithm for decompression
  * @param in The beginning of the stream to be decompressed
- * @param inBytes Size of the compressed stream, if known. This should be set to
- *                a negative value if not known: the underlying decompression
- *                routine will progressively decompress the stream if supported.
+ * @param inBytes Size of the compressed stream, if known.
  * @param out A pointer to the output buffer.
- * @param outBytes A pointer to the size of the output buffer. If decompressing
- *                 the input would result in exceeding this size and @p resize
- *                 is true, an attempt will be made to realloc(3) the output and
- *                 update both *out and *outBytes.
- * @param resize Whether to attempt resizing the output buffer if needed.
+ * @param outBytes A pointer to the size of the output buffer.
  *
  * @return The number of decompressed bytes on success, or -1 on failure.
  */
 int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
-                        void **out, size_t *outBytes, bool resize);
+                       void *out, size_t outBytes);
 
 /**
  * @brief Open the file at @p path for reading, decompressing the file if it is

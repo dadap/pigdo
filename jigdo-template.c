@@ -341,7 +341,7 @@ static ssize_t decompressDataPart(FILE *fp, void *out, size_t avail)
         free(in);
         return -1;
     }
-    ret = decompressMemToMem(type, in, inBytes, &out, &outBytes, false);
+    ret = decompressMemToMem(type, in, inBytes, out, outBytes);
     free(in);
 
     assert(ret == outBytes || ret == -1);
