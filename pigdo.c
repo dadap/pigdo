@@ -313,13 +313,19 @@ int main(int argc, const char * const * argv)
     }
 
     jigdoDir = dirname(jigdoFile);
-    templatePath = dircat(jigdoDir, jigdo.templateName);
+
+    if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
+        templatePath = strdup(jigdo.templateName);
+    } else {
+        templatePath = dircat(jigdoDir, jigdo.templateName);
+    }
+
     if (!templatePath) {
         fprintf(stderr, "Failed to build the template path.\n");
         goto done;
     }
 
-    fp = fopen(templatePath, "r");
+    fp = fetchopen(templatePath);
     free(templatePath);
 
     if (!fp) {

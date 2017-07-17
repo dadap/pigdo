@@ -20,6 +20,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "util.h"
+
 char *dircat(const char *dir, const char *file)
 {
     char *ret;
@@ -46,4 +48,9 @@ off_t pagemod(off_t offset)
 off_t pagebase(off_t offset)
 {
     return offset - pagemod(offset);
+}
+
+bool isAbsolute(const char *path)
+{
+    return path[0] == '/';
 }

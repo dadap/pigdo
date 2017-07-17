@@ -18,6 +18,8 @@
 #ifndef PIGDO_UTIL_H
 #define PIGDO_UTIL_H
 
+#include <stdbool.h>
+
 /**
  * @brief Concatenate a directory and file name, with a '/' in between
  *
@@ -37,4 +39,9 @@ off_t pagemod(off_t offset);
  * @brief get a page-aligned starting address for @p offset
  */
 off_t pagebase(off_t offset);
+
+/**
+ * @brief Determine whether a path is absolute
+ */
+bool isAbsolute(const char *path);
 #endif
