@@ -24,6 +24,7 @@
 
 #include "jigdo.h"
 #include "util.h"
+#include "decompress.h"
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
@@ -534,27 +535,42 @@ done:
     return ret;
 }
 
-bool freadJigdoFile(FILE *fp, jigdoData *data)
+bool readJigdoFile(const char *path, jigdoData *data)
 {
+    int ret = false;
+    FILE *fp;
+
+    fp = gunzopen(path);
+    if (!fp) {
+        goto done;
+    }
+
     memset(data, 0, sizeof(*data));
 
     if (!freadJigdoFileJigdoSection(fp, data)) {
-        return false;
+        goto done;
     }
 
     if (!freadJigdoFileImageSection(fp, data)) {
-        return false;
+        goto done;
     }
 
     if (!freadJigdoFilePartsSections(fp, data)) {
-        return false;
+        goto done;
     }
 
     if (!freadJigdoFileServersSection(fp, data)) {
-        return false;
+        goto done;
     }
 
-    return true;
+    ret = true;
+
+done:
+    if (fp) {
+        fclose(fp);
+    }
+
+    return ret;
 }
 
 /**

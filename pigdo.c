@@ -301,14 +301,7 @@ int main(int argc, const char * const * argv)
 
     jigdoFile = strdup(argv[1]);
 
-    // TODO support loading .jigdo file from URI and gzip compressed files
-    fp = fopen(jigdoFile, "r");
-    if (!fp) {
-        fprintf(stderr, "Unable to open '%s' for reading\n", jigdoFile);
-        goto done;
-    }
-
-    if (freadJigdoFile(fp, &jigdo)) {
+    if (readJigdoFile(jigdoFile, &jigdo)) {
             printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
             printf("Template filename is: %s\n", jigdo.templateName);
             printf("Template MD5 sum is: ");
@@ -318,8 +311,6 @@ int main(int argc, const char * const * argv)
             fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
             goto done;
     }
-
-    fclose(fp);
 
     jigdoDir = dirname(jigdoFile);
     templatePath = dircat(jigdoDir, jigdo.templateName);

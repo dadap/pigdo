@@ -72,14 +72,12 @@ typedef struct {
 /**
  * @brief Parse data from a @c .jigdo file
  *
- * @note TODO currently only supports plain (i.e., not gzipped) @c .jigdo format
- *
- * @param fp An open <tt>FILE *</tt> handle to a @c .jigdo file.
+ * @param path The path to the file.
  * @param data A pointer to a jigdoData record where parsed data will be stored.
  *
  * @return @c true on success; @c false on error
  */
-bool freadJigdoFile(FILE *fp, jigdoData *data);
+bool readJigdoFile(const char *path, jigdoData *data);
 
 /**
  * @brief Free heap-allocated members of a jigdoData record

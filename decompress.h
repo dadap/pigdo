@@ -29,6 +29,7 @@ typedef enum {
     COMPRESSED_DATA_ZLIB,        ///< zlib compression
     COMPRESSED_DATA_BZIP2,       ///< bzip2 compression
     COMPRESSED_DATA_GZIP,        ///< gzip compression
+    COMPRESSED_DATA_PLAIN,       ///< Uncompressed data
 } compressType;
 
 /**
@@ -51,4 +52,16 @@ typedef enum {
 int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
                         void **out, size_t *outBytes, bool resize);
 
+/**
+ * @brief Open the file at @p path for reading, decompressing the file if it is
+ *        gzip-compressed
+ *
+ * @param path The file to open.
+ *
+ * @return An open <tt>FILE *</tt> handle to the file itself, if not gzipped,
+ *         or a temporary decompressed copy of the file, if gzipped, or NULL
+ *         on error. If the file was gzipped, its temporary decompressed copy
+ *         will be deleted when the handle is closed.
+ */
+FILE *gunzopen(const char *path);
 #endif

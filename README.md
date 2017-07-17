@@ -93,7 +93,6 @@ and known bugs, and there are likely to be several unknown bugs as well.
 
 Missing features include, but are not limited to:
 
-* Support for gzip-compressed .jigdo files is not implemented yet.
 * Several features documented as being part of the .jigdo file format are not
   handled correctly; for example, quoting and character escapes and comments,
   specifying multiple possible paths for resolving matched files in the .jigdo
