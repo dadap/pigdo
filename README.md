@@ -93,8 +93,6 @@ and known bugs, and there are likely to be several unknown bugs as well.
 
 Missing features include, but are not limited to:
 
-* The MD5 checksums of downloaded parts are not verified after downloading, and
-  the MD5 checksum of reconstructed files are not verified after reconstruction.
 * Support for gzip-compressed .jigdo files is not implemented yet.
 * Several features documented as being part of the .jigdo file format are not
   handled correctly; for example, quoting and character escapes and comments,

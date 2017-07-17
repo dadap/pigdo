@@ -62,4 +62,14 @@ void printMd5Sum(md5Checksum md5);
  * @return The computer MD5 checksum
  */
 md5Checksum md5MemOneShot(const void *in, size_t len);
+
+/**
+ * @brief compute an MD5 checksum for a file
+ *
+ * @param fd An open file descriptor to the file to checksum
+ *
+ * @return The MD5 checksum. If an error occurred, all bits in the checksum will
+ *         be set to 1.
+ */
+md5Checksum md5Fd(int fd);
 #endif

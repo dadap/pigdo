@@ -18,6 +18,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include "jigdo-md5.h"
 #include "md5.h"
@@ -183,5 +186,45 @@ md5Checksum md5MemOneShot(const void *in, size_t len)
     MD5Update(&ctx, in, len);
     MD5Final(&ret, &ctx);
 
+    return ret;
+}
+
+md5Checksum md5Fd(int fd)
+{
+    md5Checksum ret;
+    struct MD5Context ctx;
+    struct stat st;
+    off_t pos;
+    int windowSize = getpagesize() * 1024;
+
+    if (fstat(fd, &st) != 0) {
+        goto fail;
+    }
+
+    MD5Init(&ctx);
+
+    for (pos = 0; pos < st.st_size; pos += windowSize) {
+        void *buf;
+        size_t toRead = st.st_size - pos;
+
+        if (toRead > windowSize) {
+            toRead = windowSize;
+        }
+
+        buf = mmap(NULL, toRead, PROT_READ, MAP_PRIVATE, fd, pos);
+        if (buf == MAP_FAILED) {
+            goto fail;
+        }
+
+        MD5Update(&ctx, buf, toRead);
+
+        munmap(buf, toRead);
+    }
+
+    MD5Final(&ret, &ctx);
+    return ret;
+
+fail:
+    memset(&ret, 0xff, sizeof(ret));
     return ret;
 }

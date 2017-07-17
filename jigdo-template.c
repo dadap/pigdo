@@ -19,7 +19,6 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <sys/mman.h>
-#include <errno.h>
 
 #include "jigdo-template.h"
 #include "decompress.h"

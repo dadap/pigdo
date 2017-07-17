@@ -250,6 +250,7 @@ int main(int argc, const char * const * argv)
     bool resize;
     static const int numThreads = 16;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
+    md5Checksum fileChecksum;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
@@ -406,7 +407,26 @@ int main(int argc, const char * const * argv)
 
     fetch_cleanup();
 
-    ret = 0;
+    printf("All parts downloaded. Performing final MD5 verification check...");
+    fflush(stdout);
+
+    fileChecksum = md5Fd(fd);
+    ret = md5Cmp(&fileChecksum, &(table[count-1].u.imageInfo.md5Sum));
+
+    if (ret == 0) {
+        printf(" done!\n");
+    } else {
+        printf(" error!\n");
+        printf("Expected: ");
+        printMd5Sum(table[count-1].u.imageInfo.md5Sum);
+        printf("; got: ");
+        printMd5Sum(fileChecksum);
+        printf("\n");
+        fprintf(stderr, "MD5 checksum verification failed!\n");
+    }
+
+    fflush(stdout);
+    fflush(stderr);
 
 done:
     /* Clean up */
