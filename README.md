@@ -99,7 +99,6 @@ Missing features include, but are not limited to:
   file, and handling local and remote paths in places where pigdo currently only
   supports remote and local paths, respectively.
 * Some fields that are part of the .jigdo file format are ignored.
-* Decompression of bzip2-compressed data in the .template file is not supported.
 * Pigdo currently infers the names and locations of several key files based on
   the contents of the .jigdo file, resolved relative to the its location. Pigdo
   is intended to support overriding these inferences.

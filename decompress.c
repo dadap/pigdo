@@ -23,6 +23,29 @@
 #include "decompress.h"
 
 /**
+ * @brief Decompress a bzip2 stream
+ *
+ * API is the same as decompressMemToMem(), but without the type argument.
+ */
+static int bunzip2MemToMem(void *in, ssize_t inBytes, void **out,
+                           size_t *outBytes, bool resize)
+{
+    unsigned int written = *outBytes;
+
+    /* Only one-shot decompression supported for now */
+    if (inBytes < 0 || resize) {
+        return -1;
+    }
+
+    if (BZ2_bzBuffToBuffDecompress(*out, &written, in, inBytes, 0, 0) ==
+        BZ_OK) {
+        return written;
+    }
+
+    return -1;
+}
+
+/**
  * @brief Decompress a zlib stream
  *
  * API is the same as decompressMemToMem(), but without the type argument.
@@ -73,7 +96,9 @@ int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
             return infl8(in, inBytes, out, outBytes, resize);
             break;
 
-        case COMPRESSED_DATA_BZIP2:   // TODO Not implemented yet
+        case COMPRESSED_DATA_BZIP2:
+            return bunzip2MemToMem(in, inBytes, out, outBytes, resize);
+
         case COMPRESSED_DATA_GZIP:    // Not implemented, try gunzopen() instead
         case COMPRESSED_DATA_UNKNOWN:
         default:
