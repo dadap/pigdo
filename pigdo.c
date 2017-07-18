@@ -294,6 +294,10 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
+    if (!fetch_init()) {
+        goto done;
+    }
+
     jigdoFile = strdup(argv[1]);
 
     if (readJigdoFile(jigdoFile, &jigdo)) {
@@ -388,10 +392,6 @@ int main(int argc, const char * const * argv)
 
     if (pthread_mutex_init(&tableLock, NULL) != 0) {
         fprintf(stderr, "Failed to initialize mutex\n");
-        goto done;
-    }
-
-    if (!fetch_init()) {
         goto done;
     }
 
