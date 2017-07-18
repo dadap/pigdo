@@ -275,108 +275,14 @@ static int fileRevSizeCmp(const void *a, const void *b)
     return fileB->size - fileA->size;
 }
 
-int main(int argc, const char * const * argv)
+static bool pfetch(int fd, int numThreads, jigdoData jigdo,
+                   templateDescTable table)
 {
-    FILE *fp = NULL;
-    jigdoData jigdo;
-    templateDescTable table;
-    int ret = 1, fd = -1, i, contiguousComplete, completedFiles = -1;
-    size_t fileBytes;
-    char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
-    uint64_t imageLen;
-    bool resize;
-    static const int numThreads = 16;
+    bool ret = false;
+    int i, contiguousComplete, completedFiles = -1;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
+    size_t fileBytes;
     md5Checksum fileChecksum;
-
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
-        goto done;
-    }
-
-    if (!fetch_init()) {
-        goto done;
-    }
-
-    jigdoFile = strdup(argv[1]);
-
-    if (readJigdoFile(jigdoFile, &jigdo)) {
-            printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
-            printf("Template filename is: %s\n", jigdo.templateName);
-            printf("Template MD5 sum is: ");
-            printMd5Sum(jigdo.templateMD5);
-            printf("\n");
-    } else {
-            fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
-            goto done;
-    }
-
-    jigdoDir = dirname(jigdoFile);
-
-    if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
-        templatePath = strdup(jigdo.templateName);
-    } else {
-        templatePath = dircat(jigdoDir, jigdo.templateName);
-    }
-
-    if (!templatePath) {
-        fprintf(stderr, "Failed to build the template path.\n");
-        goto done;
-    }
-
-    fp = fetchopen(templatePath);
-    free(templatePath);
-
-    if (!fp) {
-        fprintf(stderr, "Unable to open '%s' for reading\n", templatePath);
-        goto done;
-    }
-
-    if (!freadTemplateDesc(fp, &table)) {
-        fprintf(stderr, "Failed to read the template DESC table.\n");
-        goto done;
-    }
-
-    /* Download the largest files first, to maximize the parallelism */
-    qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
-
-    imageLen = table.imageInfo.size;
-    printf("Image size is: %"PRIu64" bytes\n", imageLen);
-    printf("Image md5sum is: ");
-    printMd5Sum(table.imageInfo.md5Sum);
-    printf("\n");
-
-    if (isURI(jigdoFile)) {
-        imagePath = strdup(jigdo.imageName);
-    } else {
-        imagePath = dircat(jigdoDir, jigdo.imageName);
-    }
-
-    if (!imagePath) {
-        goto done;
-    }
-
-    fd = open(imagePath, O_RDWR | O_CREAT, 0644);
-    free(imagePath);
-    if (fd < 0) {
-        fprintf(stderr, "Failed to open image file '%s'\n", jigdo.imageName);
-        goto done;
-    }
-
-#if __APPLE__
-    /* Poor man's fallocate(2) for Mac OS X - much slower than the real thing */
-    resize = (pwrite(fd, "\0", 1, imageLen-1) == 1);
-#else
-    resize = (posix_fallocate(fd, 0, imageLen) == 0);
-#endif
-    if (!resize) {
-        fprintf(stderr, "Failed to allocate disk space for image file\n");
-        goto done;
-    }
-
-    if (!writeDataFromTemplate(fp, fd, &table)) {
-        goto done;
-    }
 
     workerState = calloc(numThreads, sizeof(workerState[0]));
     if (!workerState) {
@@ -452,15 +358,13 @@ int main(int argc, const char * const * argv)
         usleep(123456); // No need to keep the CPU spinning in a tight loop
     }
 
-    fetch_cleanup();
-
     printf("All parts downloaded. Performing final MD5 verification check...");
     fflush(stdout);
 
     fileChecksum = md5Fd(fd);
-    ret = md5Cmp(&fileChecksum, &(table.imageInfo.md5Sum));
+    ret = md5Cmp(&fileChecksum, &(table.imageInfo.md5Sum)) == 0;
 
-    if (ret == 0) {
+    if (ret) {
         printf(" done!\n");
     } else {
         printf(" error!\n");
@@ -476,6 +380,117 @@ int main(int argc, const char * const * argv)
     fflush(stderr);
 
 done:
+    free(workerState);
+
+    return ret;
+}
+
+int main(int argc, const char * const * argv)
+{
+    FILE *fp = NULL;
+    jigdoData jigdo;
+    templateDescTable table;
+    int ret = 1, fd = -1;
+    bool resize;
+    char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
+    static const int numThreads = 16;
+
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
+        goto done;
+    }
+
+    if (!fetch_init()) {
+        goto done;
+    }
+
+    jigdoFile = strdup(argv[1]);
+
+    if (readJigdoFile(jigdoFile, &jigdo)) {
+            printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
+            printf("Template filename is: %s\n", jigdo.templateName);
+            printf("Template MD5 sum is: ");
+            printMd5Sum(jigdo.templateMD5);
+            printf("\n");
+    } else {
+            fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
+            goto done;
+    }
+
+    jigdoDir = dirname(jigdoFile);
+
+    if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
+        templatePath = strdup(jigdo.templateName);
+    } else {
+        templatePath = dircat(jigdoDir, jigdo.templateName);
+    }
+
+    if (!templatePath) {
+        fprintf(stderr, "Failed to build the template path.\n");
+        goto done;
+    }
+
+    fp = fetchopen(templatePath);
+    free(templatePath);
+
+    if (!fp) {
+        fprintf(stderr, "Unable to open '%s' for reading\n", templatePath);
+        goto done;
+    }
+
+    if (!freadTemplateDesc(fp, &table)) {
+        fprintf(stderr, "Failed to read the template DESC table.\n");
+        goto done;
+    }
+
+    /* Download the largest files first, to maximize the parallelism */
+    qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
+
+    printf("Image size is: %"PRIu64" bytes\n", table.imageInfo.size);
+    printf("Image md5sum is: ");
+    printMd5Sum(table.imageInfo.md5Sum);
+    printf("\n");
+
+    if (isURI(jigdoFile)) {
+        imagePath = strdup(jigdo.imageName);
+    } else {
+        imagePath = dircat(jigdoDir, jigdo.imageName);
+    }
+
+    if (!imagePath) {
+        goto done;
+    }
+
+    fd = open(imagePath, O_RDWR | O_CREAT, 0644);
+    free(imagePath);
+
+    if (fd < 0) {
+        fprintf(stderr, "Failed to open image file '%s'\n", jigdo.imageName);
+        goto done;
+    }
+
+#if __APPLE__
+    /* Poor man's fallocate(2) for Mac OS X - much slower than the real thing */
+    resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
+#else
+    resize = (posix_fallocate(fd, 0, table.imageInfo.size) == 0);
+#endif
+    if (!resize) {
+        fprintf(stderr, "Failed to allocate disk space for image file\n");
+        goto done;
+    }
+
+    if (!writeDataFromTemplate(fp, fd, &table)) {
+        goto done;
+    }
+
+    if (!pfetch(fd, numThreads, jigdo, table)) {
+        goto done;
+    }
+
+    ret = 0;
+
+done:
     /* Clean up */
     if (fp) {
         fclose(fp);
@@ -485,7 +500,7 @@ done:
         close(fd);
     }
 
-    free(workerState);
+    fetch_cleanup();
     free(jigdoFile);
 
     return ret;
