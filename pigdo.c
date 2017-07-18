@@ -264,6 +264,17 @@ static size_t fileSizeTotal(const templateDescTable *table)
     return ret;
 }
 
+/*
+ * @brief Comparator function to allow sorting files in reverse size order
+ */
+static int fileRevSizeCmp(const void *a, const void *b)
+{
+    const templateFileEntry *fileA = (templateFileEntry *) a;
+    const templateFileEntry *fileB = (templateFileEntry *) b;
+
+    return fileB->size - fileA->size;
+}
+
 int main(int argc, const char * const * argv)
 {
     FILE *fp = NULL;
@@ -321,6 +332,9 @@ int main(int argc, const char * const * argv)
         fprintf(stderr, "Failed to read the template DESC table.\n");
         goto done;
     }
+
+    /* Download the largest files first, to maximize the parallelism */
+    qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
 
     imageLen = table.imageInfo.size;
     printf("Image size is: %"PRIu64" bytes\n", imageLen);
