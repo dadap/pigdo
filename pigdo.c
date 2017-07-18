@@ -361,7 +361,16 @@ int main(int argc, const char * const * argv)
     printMd5Sum(table[count-1].u.imageInfo.md5Sum);
     printf("\n");
 
-    imagePath = dircat(jigdoDir, jigdo.imageName);
+    if (isURI(jigdoFile)) {
+        imagePath = strdup(jigdo.imageName);
+    } else {
+        imagePath = dircat(jigdoDir, jigdo.imageName);
+    }
+
+    if (!imagePath) {
+        goto done;
+    }
+
     fd = open(imagePath, O_RDWR | O_CREAT, 0644);
     free(imagePath);
     if (fd < 0) {

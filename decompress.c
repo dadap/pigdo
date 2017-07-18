@@ -94,45 +94,32 @@ int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
 }
 
 /**
- * @brief Detects whether the file at @p path is gzip-compressed.
- *
- * @return COMPRESSED_DATA_GZIP if the file is gzip-compressed,
- *         COMPRESSED_DATA_PLAIN if the file is not gzip-compressed, or
- *         COMPRESSED_DATA_UNKNOWN if an error occurred.
- */
-static compressType isgzip(const char *path)
-{
-    compressType ret = COMPRESSED_DATA_UNKNOWN;
-
-    gzFile gz = gzopen(path, "r");
-    if (gz) {
-        ret = gzdirect(gz) ? COMPRESSED_DATA_PLAIN : COMPRESSED_DATA_GZIP;
-        if (gzclose(gz) != Z_OK) {
-            ret = COMPRESSED_DATA_UNKNOWN;
-        }
-    }
-
-    return ret;
-}
-
-/**
- * @brief Decompress the gzipped file at @p path and copy its contents to @p fp
+ * @brief Decompress a gzipped file opened on @p in and write it to @out
  *
  * @return @c true on success; @c false on failure
  */
-static bool gunzipToFile(const char *path, FILE *fp)
+static bool gunzipToFile(FILE *in, FILE *out)
 {
-    gzFile gz = gzopen(path, "r");
+    int fd = dup(fileno(in)); // Otherwise gzclose() would close in as well.
+    gzFile gz;
+
+    if (fd < 0) {
+        return false;
+    }
+
+    gz = gzdopen(fd, "r");
+
     if (gz) {
         uint8_t buf[65536];
         ssize_t readLen;
 
         do {
             readLen = gzread(gz, buf, sizeof(buf));
+
             if (readLen >= 0) {
                 // This should preserve the value of readLen on success, or
                 // reset it to -1 on failure.
-                readLen = fwrite(buf, 1, readLen, fp);
+                readLen = fwrite(buf, 1, readLen, out);
             }
         } while (readLen == sizeof(buf));
 
@@ -143,30 +130,59 @@ static bool gunzipToFile(const char *path, FILE *fp)
         return true;
     }
 
+    close(fd);
+
     return false;
 }
 
-FILE *gunzopen(const char *path)
+bool gunzipFReplace(FILE **fp)
 {
-    switch (isgzip(path)) {
-        case COMPRESSED_DATA_GZIP: {
-            FILE *fp = tmpfile();
+    int fd = dup(fileno(*fp)); // Otherwise gzclose() would close *fp as well
+    gzFile gz;
+    bool isGz;
 
-            if (fp) {
-                if (gunzipToFile(path, fp)) {
-                    return fp;
-                } else {
-                    fclose(fp);
-                }
-            }
+    if (fseek(*fp, 0, SEEK_SET) != 0) {
+        return false;
+    }
 
-            return NULL;
+    if (fd < 0) {
+        return false;
+    }
+
+    gz = gzdopen(fd, "r");
+
+    if (gz == NULL) {
+        close(fd);
+        return false;
+    }
+
+    isGz = !gzdirect(gz);
+    if (gzclose(gz) != Z_OK) {
+        return false;
+    }
+
+    if (isGz) {
+        FILE *fpOut;
+
+        if (fseek(*fp, 0, SEEK_SET) != 0) {
+            return false;
         }
 
-        case COMPRESSED_DATA_PLAIN:
-            return fopen(path, "r");
+        fpOut = tmpfile();
 
-        default:
-            return NULL;
+        if (fpOut) {
+            if (gunzipToFile(*fp, fpOut)) {
+                fclose(*fp);
+                *fp = fpOut;
+
+                return true;
+            }
+
+            fclose(fpOut);
+        }
+        return false;
+    } else {
+        /* Not compressed; do nothing */
+        return true;
     }
 }

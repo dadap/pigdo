@@ -47,15 +47,18 @@ int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
                        void *out, size_t outBytes);
 
 /**
- * @brief Open the file at @p path for reading, decompressing the file if it is
- *        gzip-compressed
+ * @brief Determine whether the file opened at @p fp is gzip-compressed, and
+ *        replace @p fp with a handle to an uncompressed version if so
  *
- * @param path The file to open.
+ * @param fp A pointer to an open <tt>FILE *</a> handle that may or may not be
+ *           gzip-compressed.
  *
- * @return An open <tt>FILE *</tt> handle to the file itself, if not gzipped,
- *         or a temporary decompressed copy of the file, if gzipped, or NULL
- *         on error. If the file was gzipped, its temporary decompressed copy
- *         will be deleted when the handle is closed.
+ * @return @c true on success; @c false if an error occurred. If the file
+ *         underlying @p fp was gzip-compressed, @p fp will be closed and
+ *         replaced with a new <tt>FILE *</tt> handle to a temporary file
+ *         containing the uncompressed contents of the original @p fp. The
+ *         temporary file will be deleted once its handle is closed. If the
+ *         original file is not compressed, @p fp will be left alone.
  */
-FILE *gunzopen(const char *path);
+bool gunzipFReplace(FILE **fp);
 #endif

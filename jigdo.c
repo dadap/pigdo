@@ -25,6 +25,7 @@
 #include "jigdo.h"
 #include "util.h"
 #include "decompress.h"
+#include "fetch.h"
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
@@ -540,8 +541,12 @@ bool readJigdoFile(const char *path, jigdoData *data)
     int ret = false;
     FILE *fp;
 
-    fp = gunzopen(path);
+    fp = fetchopen(path);
     if (!fp) {
+        goto done;
+    }
+
+    if (!gunzipFReplace(&fp)) {
         goto done;
     }
 
