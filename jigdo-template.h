@@ -52,19 +52,8 @@ typedef struct {
  */
 typedef struct {
     uint64_t size;         ///< Uncompressed length of the data block
-    uint64_t partialWrite; ///< Data written so far during reconstruction
+    off_t offset;          ///< Offset within reassembled file
 } templateDataEntry;
-
-/**
- * @brief data parsed from a DESC table entry for a matched file
- */
-typedef struct {
-    uint64_t size;                   ///< Length of the component file
-    uint64_t rsync64SumInitialBlock; ///< rsync64 sum of the inital block; will
-                                     ///< be initialized to 0 when entry type is
-                                     ///< TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE.
-    md5Checksum md5Sum;              ///< MD5 sum of the component file
-} templateFileEntry;
 
 /**
  * @brief Flags for different possible states of a part during reassembly
@@ -79,42 +68,47 @@ typedef enum {
 } commitStatus;
 
 /**
+ * @brief data parsed from a DESC table entry for a matched file
+ */
+typedef struct {
+    uint64_t size;                   ///< Length of the component file
+    off_t offset;                    ///< Offset within reassembled file
+    uint64_t rsync64SumInitialBlock; ///< rsync64 sum of the inital block; will
+                                     ///< be initialized to 0 when entry type is
+                                     ///< TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE.
+    md5Checksum md5Sum;              ///< MD5 sum of the component file
+    commitStatus status;
+} templateFileEntry;
+
+/**
  * @brief Data parsed from a DESC table entry
  */
 typedef struct {
-    templateEntryType type; ///< Type of the entry
-    off_t offset;           ///< offset within the image file
-    union {
-        templateImageInfoEntry imageInfo;
-        templateDataEntry data;
-        templateFileEntry file;
-    } u;                   ///< Entry data; must access via the correct union
-                           ///< member based on templateDescEntry::type.
-    commitStatus status;   ///< How far along this piece is in reconstruction
-} templateDescEntry;
+    templateImageInfoEntry imageInfo; ///< Image summary information
+    templateDataEntry *dataBlocks;    ///< Non-file data in the .template stream
+    int numDataBlocks;                ///< Count of non-file data blocks
+    templateFileEntry *files;         ///< Files to reassemble
+    int numFiles;                     ///< Count of files
+} templateDescTable;
 
 /**
  * @brief Parse a DESC table from a @c .template file
  *
  * @param fp An open <tt>FILE *</tt> handle to a Jigdo @c .template file.
- * @param table A pointer to an array of @c templateDescEntry records where the
- * parsed data for the DESC table entries will be stored. @p table may be NULL,
- * in which case freadTemplateDesc() will count the number of DESC table entries
- * and store the count in @p count without storing any entry data.
+ * @param table A pointer to a @c templateDescTable record where the parsed data
+ *              will be stored.
  *
  * @return @c true on success; @c false on error
  */
-bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count);
+bool freadTemplateDesc(FILE *fp, templateDescTable *table);
 
 /**
  * @brief Decompress the data stream from the @c .template and write it out
  *
  * @param fp An open <tt>FILE *</tt> handle to a jigdo @c .template file.
  * @param out An open file descriptor to the output file.
- * @param table Table of data/file parts from the @c .template DESC table
- * @param count number of entries in @p table
+ * @param table Table of file parts from the @c .template DESC table
  */
-bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
-                           int count);
+bool writeDataFromTemplate(FILE *fp, int outFd, templateDescTable *table);
 
 #endif

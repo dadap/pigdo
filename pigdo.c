@@ -40,7 +40,7 @@ static pthread_mutex_t tableLock; ///< @brief Lock on DESC table management
  * @return 0 if all parts are complete, positive if parts still need to be
  *           fetched, and negative if an unrecoverable error occurred.
  */
-static int partsRemain(templateDescEntry *table, int count, int *beginComplete)
+static int partsRemain(templateFileEntry *files, int count, int *beginComplete)
 {
     int i;
     bool ret = 0;
@@ -53,7 +53,7 @@ static int partsRemain(templateDescEntry *table, int count, int *beginComplete)
     for (i = *beginComplete; i < count - 1; i++) {
         bool breakLoop = false;
 
-        switch(table[i].status) {
+        switch(files[i].status) {
             case COMMIT_STATUS_FATAL_ERROR:
                 ret = -1;
                 breakLoop = true;
@@ -82,37 +82,11 @@ static int partsRemain(templateDescEntry *table, int count, int *beginComplete)
 }
 
 /**
- * @brief Count the number of @c TEMPLATE_ENTRY_TYPE_FILE* entries in @p table
- *
- * @param fileBytes If non-NULL, will store the total size of the files
- */
-static int countFiles(templateDescEntry *table, int count, size_t *fileBytes)
-{
-    int i, numFiles;
-
-    if (fileBytes) {
-        *fileBytes = 0;
-    }
-
-    for (i = numFiles = 0; i < count; i++) {
-        if (table[i].type == TEMPLATE_ENTRY_TYPE_FILE ||
-            table[i].type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) {
-            numFiles++;
-            if (fileBytes) {
-                *fileBytes += table[i].u.file.size;
-            }
-        }
-    }
-
-    return numFiles;
-}
-
-/**
- * @brief Count the number of completed files in @p table
+ * @brief Count the number of completed files in @p files
  *
  * @return number of completed files, or -1 on error
  */
-static int countCompletedFiles(templateDescEntry *table, int count,
+static int countCompletedFiles(templateFileEntry *files, int count,
                                size_t *completedBytes)
 {
     int i, numCompleted;
@@ -126,12 +100,10 @@ static int countCompletedFiles(templateDescEntry *table, int count,
     }
 
     for (i = numCompleted = 0; i < count; i++) {
-        if((table[i].type == TEMPLATE_ENTRY_TYPE_FILE ||
-            table[i].type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) &&
-           table[i].status == COMMIT_STATUS_COMPLETE) {
+        if(files[i].status == COMMIT_STATUS_COMPLETE) {
             numCompleted++;
             if (completedBytes) {
-                *completedBytes += table[i].u.file.size;
+                *completedBytes += files[i].size;
             }
         }
     }
@@ -146,7 +118,7 @@ static int countCompletedFiles(templateDescEntry *table, int count,
 /**
  * @brief Retrieve the commitStatus of @p chunk
  */
-static commitStatus getStatus(templateDescEntry *chunk)
+static commitStatus getStatus(templateFileEntry *chunk)
 {
     commitStatus status;
 
@@ -169,18 +141,16 @@ static commitStatus getStatus(templateDescEntry *chunk)
  *
  * @note The caller must take the tableLock mutex before calling in.
  */
-static bool isWaitingFileNoMutex(templateDescEntry *chunk)
+static bool isWaitingFileNoMutex(templateFileEntry *chunk)
 {
-    return ((chunk->type == TEMPLATE_ENTRY_TYPE_FILE ||
-             chunk->type == TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE) &&
-            (chunk->status == COMMIT_STATUS_NOT_STARTED ||
-             chunk->status == COMMIT_STATUS_ERROR));
+    return (chunk->status == COMMIT_STATUS_NOT_STARTED ||
+            chunk->status == COMMIT_STATUS_ERROR);
 }
 
 /**
- * @brief Scan @p table for the next unfetched chunk
+ * @brief Scan @p files for the next unfetched chunk
  */
-static templateDescEntry *selectChunk(templateDescEntry *table, int count)
+static templateFileEntry *selectChunk(templateFileEntry *files, int count)
 {
     int i;
 
@@ -190,9 +160,9 @@ static templateDescEntry *selectChunk(templateDescEntry *table, int count)
 
     /* Searching for the next available file and assigning it should happen
      * atomically, so don't release tableLock until assigned. */
-    for (i = 0; i < count - 1 && !isWaitingFileNoMutex(table + i); i++);
+    for (i = 0; i < count && !isWaitingFileNoMutex(files + i); i++);
 
-    table[i].status = COMMIT_STATUS_ASSIGNED;
+    files[i].status = COMMIT_STATUS_ASSIGNED;
 
     if (pthread_mutex_unlock(&tableLock) != 0) {
         return NULL;
@@ -202,13 +172,13 @@ static templateDescEntry *selectChunk(templateDescEntry *table, int count)
         return NULL; // Not an error; we've just reached the end.
     }
 
-    return table + i;
+    return files + i;
 }
 
 /**
  * @brief Assign @p status to @p chunk
  */
-static void setStatus(templateDescEntry *chunk, commitStatus status)
+static void setStatus(templateFileEntry *chunk, commitStatus status)
 {
     if (pthread_mutex_lock(&tableLock) != 0) {
         chunk->status = COMMIT_STATUS_FATAL_ERROR;
@@ -227,17 +197,17 @@ static void setStatus(templateDescEntry *chunk, commitStatus status)
  */
 typedef struct {
     jigdoData *jigdo;         ///< Pointer to the parsed jigdo data
-    templateDescEntry *chunk; ///< Pointer to the chunk this worker will work on
+    templateFileEntry *chunk; ///< Pointer to the chunk this worker will work on
     int outFd;                ///< Pointer to the output buffer
 } workerArgs;
 
 /**
  * @brief Verify the MD5 checksum of @p chunk at @buf
  */
-static bool verifyChunkMD5(const void *buf, const templateDescEntry *chunk)
+static bool verifyChunkMD5(const void *buf, const templateFileEntry *chunk)
 {
-    md5Checksum md5 = md5MemOneShot(buf, chunk->u.file.size);
-    return md5Cmp(&md5, &(chunk->u.file.md5Sum)) == 0;
+    md5Checksum md5 = md5MemOneShot(buf, chunk->size);
+    return md5Cmp(&md5, &(chunk->md5Sum)) == 0;
 }
 
 /**
@@ -246,13 +216,13 @@ static bool verifyChunkMD5(const void *buf, const templateDescEntry *chunk)
 static void *fetch_worker(void *args)
 {
     workerArgs *a = (workerArgs *) args;
-    char *uri = md5ToURI(a->jigdo, a->chunk->u.file.md5Sum);
+    char *uri = md5ToURI(a->jigdo, a->chunk->md5Sum);
 
     if (uri) {
         void *out;
         size_t fetched;
 
-        out = mmap(NULL, a->chunk->u.file.size + pagemod(a->chunk->offset),
+        out = mmap(NULL, a->chunk->size + pagemod(a->chunk->offset),
                    PROT_READ | PROT_WRITE, MAP_SHARED, a->outFd,
                    pagebase(a->chunk->offset));
         if (out == MAP_FAILED) {
@@ -262,12 +232,12 @@ static void *fetch_worker(void *args)
 
         setStatus(a->chunk, COMMIT_STATUS_IN_PROGRESS);
         fetched = fetch(uri, out + pagemod(a->chunk->offset),
-                        a->chunk->u.file.size);
+                        a->chunk->size);
 
-        if (fetched == a->chunk->u.file.size &&
+        if (fetched == a->chunk->size &&
             verifyChunkMD5(out + pagemod(a->chunk->offset), a->chunk)) {
-            msync(out, a->chunk->u.file.size, MS_SYNC);
-            munmap(out, a->chunk->u.file.size);
+            msync(out, a->chunk->size, MS_SYNC);
+            munmap(out, a->chunk->size);
             setStatus(a->chunk, COMMIT_STATUS_COMPLETE);
         } else {
             setStatus(a->chunk, COMMIT_STATUS_ERROR);
@@ -279,13 +249,27 @@ static void *fetch_worker(void *args)
     return NULL;
 }
 
+/*
+ * @brief Sum up the total size of all file parts combined
+ */
+static size_t fileSizeTotal(const templateDescTable *table)
+{
+    int i;
+    size_t ret = 0;
+
+    for (i = 0; i < table->numFiles; i++) {
+        ret += table->files[i].size;
+    }
+
+    return ret;
+}
+
 int main(int argc, const char * const * argv)
 {
     FILE *fp = NULL;
     jigdoData jigdo;
-    templateDescEntry *table = NULL;
-    int count, ret = 1, fd = -1, i, contiguousComplete, numFiles,
-        completedFiles = -1;
+    templateDescTable table;
+    int ret = 1, fd = -1, i, contiguousComplete, completedFiles = -1;
     size_t fileBytes;
     char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
     uint64_t imageLen;
@@ -333,32 +317,15 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    if (freadTemplateDesc(fp, NULL, &count)) {
-        printf("Template DESC table contains %d entries\n", count);
-    } else {
-        fprintf(stderr, "Failed to enumerate template DESC table entries.\n");
-        goto done;
-    }
-
-    /* Redundant calloc(3) is redundant. */
-    table = calloc(count, sizeof(*table));
-    if (!table) {
-        fprintf(stderr, "Failed to allocate memory for template DESC table.\n");
-        goto done;
-    }
-
-    if (!freadTemplateDesc(fp, &table, &count)) {
+    if (!freadTemplateDesc(fp, &table)) {
         fprintf(stderr, "Failed to read the template DESC table.\n");
         goto done;
     }
 
-    assert(table[count-1].type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO ||
-           table[count-1].type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE);
-
-    imageLen = table[count-1].u.imageInfo.size;
+    imageLen = table.imageInfo.size;
     printf("Image size is: %"PRIu64" bytes\n", imageLen);
     printf("Image md5sum is: ");
-    printMd5Sum(table[count-1].u.imageInfo.md5Sum);
+    printMd5Sum(table.imageInfo.md5Sum);
     printf("\n");
 
     if (isURI(jigdoFile)) {
@@ -389,7 +356,7 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    if (!writeDataFromTemplate(fp, fd, table, count)) {
+    if (!writeDataFromTemplate(fp, fd, &table)) {
         goto done;
     }
 
@@ -414,20 +381,22 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    numFiles = countFiles(table, count, &fileBytes);
     contiguousComplete = 0;
+    fileBytes = fileSizeTotal(&table);
 
-    printf("\nNeed to fetch %d files (%zu kBytes total).\n",
-           numFiles, fileBytes / 1024);
+    printf("\nNeed to fetch %d files (%zu kBytes total).\n", table.numFiles,
+           fileBytes);
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
      * after exhaustively searching all mirror possibilities. */
-    while (partsRemain(table, count, &contiguousComplete) > 0) {
+    while (partsRemain(table.files, table.numFiles, &contiguousComplete) > 0) {
         for (i = 0; i < numThreads; i++) {
             size_t bytes;
             commitStatus status = COMMIT_STATUS_NOT_STARTED;
-            int newCompletedFiles = countCompletedFiles(table, count, &bytes);
+            int newCompletedFiles = countCompletedFiles(table.files,
+                                                        table.numFiles,
+                                                        &bytes);
 
             /* Only print the file count if it's changed to avoid excessive
              * spam in case \r doesn't work as intended. */
@@ -435,7 +404,7 @@ int main(int argc, const char * const * argv)
                 completedFiles = newCompletedFiles;
                 printf("Downloading files... %d of %d files "
                        "(%zu/%zu kB) complete.            \r", completedFiles,
-                       numFiles, bytes / 1024, fileBytes / 1024);
+                       table.numFiles, bytes / 1024, fileBytes / 1024);
                 fflush(stdout);
             }
 
@@ -453,7 +422,8 @@ int main(int argc, const char * const * argv)
                     }
                 }
 
-                workerState[i].args.chunk = selectChunk(table, count);
+                workerState[i].args.chunk = selectChunk(table.files,
+                                                        table.numFiles);
 
                 if (!workerState[i].args.chunk) {
                     break;
@@ -474,14 +444,14 @@ int main(int argc, const char * const * argv)
     fflush(stdout);
 
     fileChecksum = md5Fd(fd);
-    ret = md5Cmp(&fileChecksum, &(table[count-1].u.imageInfo.md5Sum));
+    ret = md5Cmp(&fileChecksum, &(table.imageInfo.md5Sum));
 
     if (ret == 0) {
         printf(" done!\n");
     } else {
         printf(" error!\n");
         printf("Expected: ");
-        printMd5Sum(table[count-1].u.imageInfo.md5Sum);
+        printMd5Sum(table.imageInfo.md5Sum);
         printf("; got: ");
         printMd5Sum(fileChecksum);
         printf("\n");
@@ -503,7 +473,6 @@ done:
 
     free(workerState);
     free(jigdoFile);
-    free(table);
 
     return ret;
 }

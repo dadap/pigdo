@@ -60,13 +60,16 @@ static uint64_t templateU48ToU64(templateU48 i)
     return readLittleEndianValue(i.bytes, sizeof(i.bytes));
 }
 
-bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
+bool freadTemplateDesc(FILE *fp, templateDescTable *table)
 {
     static const char descHeader[] = { 'D', 'E', 'S', 'C' };
     char descHeaderVerify[sizeof(descHeader)];
     templateU48 sizeRead;
     uint64_t size;
     off_t offset = 0;
+    int i;
+
+    memset(table, 0, sizeof(*table));
 
     /* The last six bytes of the .template are the size of the DESC table */
 
@@ -106,7 +109,7 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
 
     size -= sizeof(descHeader) + sizeof(sizeRead);
 
-    for (*count = 0; size > sizeof(sizeRead); (*count)++) {
+    for (i = 0; size > sizeof(sizeRead); i++) {
         char type;
         uint64_t entrySize;
 
@@ -124,20 +127,6 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
 
         size -= sizeof(sizeRead);
         entrySize = templateU48ToU64(sizeRead);
-
-        /* If we're not just counting entries, store the type-agnostic values */
-
-        if (table) {
-            memset(*table + *count, 0, sizeof(*table[*count]));
-
-            (*table)[*count].type = type;
-            (*table)[*count].offset = offset;
-            offset += entrySize;
-        }
-
-        /* Parse and optionally store the type-specific values for this entry.
-         * The size data is pretty much type-agnostic, but it is handled in the
-         * type-specific section to be polite and avoid abusing the union. */
 
         switch (type) {
             md5Checksum md5Sum;
@@ -159,22 +148,31 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
                     size -= sizeof(blockLen);
                 }
 
-                if (table) {
-                    assert(offset == 2 * entrySize);
-
-                    (*table)[*count].u.imageInfo.size = entrySize;
-                    (*table)[*count].u.imageInfo.md5Sum = md5Sum;
-                    (*table)[*count].u.imageInfo.rsync64SumBlockLen =
-                        readLittleEndianValue(&blockLen, sizeof(blockLen));
-                }
+                table->imageInfo.size = entrySize;
+                table->imageInfo.md5Sum = md5Sum;
+                table->imageInfo.rsync64SumBlockLen =
+                    readLittleEndianValue(&blockLen, sizeof(blockLen));
 
                 break;
 
             case TEMPLATE_ENTRY_TYPE_DATA:
 
-                if (table) {
-                    (*table)[*count].u.data.size = entrySize;
+                table->dataBlocks = realloc(table->dataBlocks,
+                                            sizeof(table->dataBlocks[0]) *
+                                            (table->numDataBlocks + 1));
+
+                if (!table->dataBlocks) {
+                    return false;
                 }
+
+                memset(table->dataBlocks + table->numDataBlocks, 0,
+                       sizeof(table->dataBlocks[0]));
+
+                table->dataBlocks[table->numDataBlocks].size = entrySize;
+                table->dataBlocks[table->numDataBlocks].offset = offset;
+
+                table->numDataBlocks++;
+                offset += entrySize;
 
                 break;
 
@@ -193,12 +191,25 @@ bool freadTemplateDesc(FILE *fp, templateDescEntry **table, int *count)
                 }
                 size -= sizeof(md5Sum);
 
-                if (table) {
-                    (*table)[*count].u.file.size = entrySize;
-                    (*table)[*count].u.file.rsync64SumInitialBlock =
-                        readLittleEndianValue(&rsync64Sum, sizeof(rsync64Sum));
-                    (*table)[*count].u.file.md5Sum = md5Sum;
+                table->files = realloc(table->files,
+                                       sizeof(table->files[0]) *
+                                       (table->numFiles + 1));
+
+                if (!table->files) {
+                    return false;
                 }
+
+                memset(table->files + table->numFiles, 0,
+                       sizeof(table->files[0]));
+
+                table->files[table->numFiles].size = entrySize;
+                table->files[table->numFiles].offset = offset;
+                table->files[table->numFiles].rsync64SumInitialBlock =
+                    readLittleEndianValue(&rsync64Sum, sizeof(rsync64Sum));
+                table->files[table->numFiles].md5Sum = md5Sum;
+
+                table->numFiles++;
+                offset += entrySize;
 
                break;
 
@@ -352,8 +363,7 @@ static ssize_t decompressDataPart(FILE *fp, void *out, size_t avail)
     return ret;
 }
 
-bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
-                           int count)
+bool writeDataFromTemplate(FILE *fp, int outFd, templateDescTable *table)
 {
     int i;
     size_t totalDecompressedSize = 0, doneSize = 0, copiedSize = 0;
@@ -367,13 +377,11 @@ bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
 
     /* Determine the sum of the sizes of the data parts and allocate enough
      * memory to store the decompressed data. */
-    for (i = 0; i < count; i++) {
-        if (table[i].type == TEMPLATE_ENTRY_TYPE_DATA) {
-            totalDecompressedSize += table[i].u.data.size;
-        }
+    for (i = 0; i < table->numDataBlocks; i++) {
+        totalDecompressedSize += table->dataBlocks[i].size;
     }
 
-    if (totalDecompressedSize > table[count-1].u.imageInfo.size) {
+    if (totalDecompressedSize > table->imageInfo.size) {
         goto done;
     }
 
@@ -396,31 +404,26 @@ bool writeDataFromTemplate(FILE *fp, int outFd, templateDescEntry *table,
 
     /* Find all of the data part entries from the DESC table and copy the
      * corresponding bytes into the file mapping. */
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < table->numDataBlocks; i++) {
         void *out;
 
-        if (table[i].type != TEMPLATE_ENTRY_TYPE_DATA) {
-            continue;
-        }
-
         /* Bounds checking in case of a corrupted or malicious .template */
-        if (copiedSize + table[i].u.data.size > totalDecompressedSize) {
+        if (copiedSize + table->dataBlocks[i].size > totalDecompressedSize) {
             goto done;
         }
 
-        out = mmap(NULL, table[i].u.data.size + pagemod(table[i].offset),
-                   PROT_READ | PROT_WRITE, MAP_SHARED, outFd,
-                   pagebase(table[i].offset));
+        out = mmap(NULL,
+            table->dataBlocks[i].size + pagemod(table->dataBlocks[i].offset),
+               PROT_READ | PROT_WRITE, MAP_SHARED, outFd,
+               pagebase(table->dataBlocks[i].offset));
         if (out == MAP_FAILED) {
             goto done;
         }
-        memcpy(out + pagemod(table[i].offset), decompressed + copiedSize,
-               table[i].u.data.size);
-        copiedSize += table[i].u.data.size;
-        msync(out, table[i].u.data.size, MS_ASYNC);
-        munmap(out, table[i].u.data.size);
-
-        table[i].status = COMMIT_STATUS_COMPLETE;
+        memcpy(out + pagemod(table->dataBlocks[i].offset),
+               decompressed + copiedSize, table->dataBlocks[i].size);
+        copiedSize += table->dataBlocks[i].size;
+        msync(out, table->dataBlocks[i].size, MS_ASYNC);
+        munmap(out, table->dataBlocks[i].size);
     }
 
     ret = true;
