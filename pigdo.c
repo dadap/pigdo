@@ -422,7 +422,7 @@ int main(int argc, char * const * argv)
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescTable table;
-    int ret = 1, fd = -1;
+    int ret = 1, fd = -1, i;
     bool resize;
     char *jigdoFile = NULL, *jigdoDir, *templatePath = NULL, *imagePath = NULL;
     int numThreads = 16, opt;
@@ -515,6 +515,12 @@ int main(int argc, char * const * argv)
         goto done;
     }
 
+    for (i = 0; i < numMirrors; i++) {
+        if (!addServerMirror(&jigdo, mirrors[i])) {
+            goto done;
+        }
+    }
+
     /* Download the largest files first, to maximize the parallelism */
     qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
 
@@ -575,8 +581,6 @@ done:
     }
 
     if (mirrors) {
-        int i;
-
         for (i = 0; i < numMirrors; i++) {
             free(mirrors[i]);
         }

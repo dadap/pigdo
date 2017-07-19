@@ -96,4 +96,14 @@ void freeJigdoData(jigdoData *data);
  *         an error occurred.
  */
 char *md5ToURI(jigdoData *data, md5Checksum md5);
+
+/**
+ * @brief Append @p mirror to the mirrors list in the server named @serverName
+ *
+ * @param data jigdoData struct where mirror will be added
+ * @param mirror The server and its base path, in Server=URI format
+ *
+ * @return true on success; false if an error occurred
+ */
+bool addServerMirror(jigdoData *data, char *servermirror);
 #endif

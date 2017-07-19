@@ -425,17 +425,23 @@ done:
     return ret;
 }
 
-/**
- * @brief Append @p mirror to the mirrors list in the server named @serverName
- *
- * @note This will probably be exported as part of this file's external API to
- * support adding additional mirrors via command line or config file options.
- */
-static bool addServerMirror(jigdoData *data, const char *serverName,
-                            const char *mirror)
+bool addServerMirror(jigdoData *data, char *servermirror)
 {
     int i;
-    server *s = getServer(data, serverName);
+    server *s;
+    char *c, *serverName, *mirror;
+
+    // XXX nuke args like --try-last until quoting support is added
+    c = strchr(servermirror, ' ');
+    if (c) *c = 0;
+
+    mirror = trimWhitespace(getEqualValue(servermirror));
+    if (!mirror) {
+        return false;
+    }
+
+    serverName = trimWhitespace(getKey(servermirror, '='));
+    s = getServer(data, serverName);
 
     if (!s) {
         return false;
@@ -479,7 +485,6 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
     }
 
     do {
-        char *serverMirror = NULL, *serverName, *c;
         bool success = false;
 
         read = getline(&line, &lineLen, fp);
@@ -492,28 +497,15 @@ static bool freadJigdoFileServersSection(FILE *fp, jigdoData *data)
             continue;
         }
 
-        serverMirror = getEqualValue(trimmed);
-        if (!serverMirror) {
-            /* This line contains no server: clean up and continue loop */
-            success = true;
-            goto mirrorDone;
-        }
-        trimmed = trimWhitespace(serverMirror);
+        trimmed = trimWhitespace(line);
 
-        // XXX nuke args like --try-last until quoting support is added
-        c = strchr(trimmed, ' ');
-        if (c) *c = 0;
-
-        serverName = trimWhitespace(getKey(line, '='));
-        if (!addServerMirror(data, serverName, trimmed)) {
-            free(serverMirror);
+        if (!addServerMirror(data, trimmed)) {
             goto mirrorDone;
         }
 
         success = true;
-mirrorDone:
-        free(serverMirror);
 
+mirrorDone:
         if (!success) {
             goto done;
         }
