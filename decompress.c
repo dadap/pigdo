@@ -19,6 +19,7 @@
 #include <zlib.h>
 #include <bzlib.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "decompress.h"
 
