@@ -99,11 +99,6 @@ Missing features include, but are not limited to:
   file, and handling local and remote paths in places where pigdo currently only
   supports remote and local paths, respectively.
 * Some fields that are part of the .jigdo file format are ignored.
-* Pigdo currently infers the names and locations of several key files based on
-  the contents of the .jigdo file, resolved relative to the its location. Pigdo
-  is intended to support overriding these inferences.
-* Pigdo is intended to support specifying mirror sites beyond those listed in
-  the .jigdo file.
 * Pigdo is intended to allow searching for matching files in local directories.
 * Pigdo is intended to allow caching downloaded files locally, in addition to
   assembling them directly into the target output file.
