@@ -391,11 +391,8 @@ static const int defaultNumThreads = 16;
 void usage(const char *progName)
 {
     fprintf(stderr,
-            "Usage: %s jigdofile\\\n"
-            "    [ --output outfile ] \\\n"
-            "    [ --template template ] \\\n"
-            "    [ --threads threads ] \\\n"
-            "    [ --mirror mirror=path ] ... \\\n\n\n"
+            "Usage: %s jigdofile \\\n    "
+            "[-o output] [-t template] [-j threads] [-m mirror=path ...]\n\n"
             "jigdofile:       location of the .jigdo file\n\n"
             "-o | --output:   location where output file will be written\n"
             "                 default: use filename specified in the .jigdo\n"
