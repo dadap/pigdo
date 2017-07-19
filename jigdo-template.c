@@ -414,16 +414,24 @@ bool writeDataFromTemplate(FILE *fp, int outFd, templateDescTable *table)
 
         out = mmap(NULL,
             table->dataBlocks[i].size + pagemod(table->dataBlocks[i].offset),
-               PROT_READ | PROT_WRITE, MAP_SHARED, outFd,
+               PROT_WRITE, MAP_SHARED, outFd,
                pagebase(table->dataBlocks[i].offset));
         if (out == MAP_FAILED) {
             goto done;
         }
+
         memcpy(out + pagemod(table->dataBlocks[i].offset),
                decompressed + copiedSize, table->dataBlocks[i].size);
         copiedSize += table->dataBlocks[i].size;
-        msync(out, table->dataBlocks[i].size, MS_ASYNC);
-        munmap(out, table->dataBlocks[i].size);
+        if (msync(out, table->dataBlocks[i].size +
+                  pagemod(table->dataBlocks[i].offset), MS_ASYNC) != 0) {
+            goto done;
+        }
+
+        if (munmap(out, table->dataBlocks[i].size +
+                   pagemod(table->dataBlocks[i].offset)) != 0) {
+            goto done;
+        }
     }
 
     ret = true;
