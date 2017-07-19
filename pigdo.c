@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #include "jigdo.h"
 #include "jigdo-template.h"
@@ -385,18 +386,87 @@ done:
     return ret;
 }
 
-int main(int argc, const char * const * argv)
+static const int defaultNumThreads = 16;
+
+void usage(const char *progName)
+{
+    fprintf(stderr,
+            "Usage: %s jigdofile\\\n"
+            "    [ --output outfile ] \\\n"
+            "    [ --template template ] \\\n"
+            "    [ --threads threads ] \\\n"
+            "    [ --mirror mirror=path ] ... \\\n\n\n"
+            "jigdofile:       location of the .jigdo file\n\n"
+            "-o | --output:   location where output file will be written\n"
+            "                 default: use filename specified in the .jigdo\n"
+            "                 file, and save in same directory as the .jigdo\n"
+            "                 file, or in the current directory if the .jigdo\n"
+            "                 file was fetched remotely\n\n"
+            "-t | --template: location of the .template file\n"
+            "                 default: use filename specified in the .jigdo\n"
+            "                 file, and save in same directory as the .jigdo\n"
+            "                 file, or in the current directory if the .jigdo\n"
+            "                 file was fetched remotely\n\n"
+            "-j | --threads:  number of simultaneous download threads\n"
+            "                 default: %d\n\n"
+            "-m | --mirror:   map a mirror name to a URI in 'mirror=path'\n"
+            "                 format, where 'mirror' is the name of a mirror\n"
+            "                 as specified in the .jigdo file, and 'path' is\n"
+            "                 a URI where file paths in the .jigdo file will\n"
+            "                 be mapped\n",
+            progName, defaultNumThreads);
+}
+
+int main(int argc, char * const * argv)
 {
     FILE *fp = NULL;
     jigdoData jigdo;
     templateDescTable table;
     int ret = 1, fd = -1;
     bool resize;
-    char *jigdoFile = NULL, *jigdoDir, *templatePath, *imagePath;
-    static const int numThreads = 16;
+    char *jigdoFile = NULL, *jigdoDir, *templatePath = NULL, *imagePath = NULL;
+    int numThreads = 16, opt;
+    char **mirrors;
+    int numMirrors = 0;
+    const char *progName = argv[0];
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s jigdo-file-name\n", argv[0]);
+    static struct option opts[] = {
+        {"mirror",      required_argument, NULL, 'm'},
+        {"output",      required_argument, NULL, 'o'},
+        {"template",    required_argument, NULL, 't'},
+        {"threads",     required_argument, NULL, 'j'},
+        {NULL,          0,                 NULL,  0 }
+    };
+
+    while ((opt = getopt_long(argc, argv, "m:o:t:j:", opts, NULL)) != -1) {
+        switch(opt) {
+            case 'm':
+                mirrors = realloc(mirrors, (numMirrors + 1) * sizeof(char *));
+                mirrors[numMirrors++] = strdup(optarg);
+                // TODO still need to add these to the jigdoData struct later
+                break;
+            case 'o':
+                imagePath = strdup(optarg);
+                break;
+            case 't':
+                templatePath = strdup(optarg);
+                break;
+            case 'j':
+                if (sscanf(optarg, "%d", &numThreads) != 1 || numThreads < 0 ) {
+                    usage(progName);
+                    goto done;
+                }
+                break;
+            default:
+                usage(progName);
+                goto done;
+        }
+    }
+    argc -= optind;
+    argv += optind;
+
+    if (argc < 1) {
+        usage(progName);
         goto done;
     }
 
@@ -404,7 +474,7 @@ int main(int argc, const char * const * argv)
         goto done;
     }
 
-    jigdoFile = strdup(argv[1]);
+    jigdoFile = strdup(argv[0]);
 
     if (readJigdoFile(jigdoFile, &jigdo)) {
             printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
@@ -419,10 +489,12 @@ int main(int argc, const char * const * argv)
 
     jigdoDir = dirname(jigdoFile);
 
-    if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
-        templatePath = strdup(jigdo.templateName);
-    } else {
-        templatePath = dircat(jigdoDir, jigdo.templateName);
+    if (!templatePath) {
+        if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
+            templatePath = strdup(jigdo.templateName);
+        } else {
+            templatePath = dircat(jigdoDir, jigdo.templateName);
+        }
     }
 
     if (!templatePath) {
@@ -451,10 +523,12 @@ int main(int argc, const char * const * argv)
     printMd5Sum(table.imageInfo.md5Sum);
     printf("\n");
 
-    if (isURI(jigdoFile)) {
-        imagePath = strdup(jigdo.imageName);
-    } else {
-        imagePath = dircat(jigdoDir, jigdo.imageName);
+    if (!imagePath) {
+        if (isURI(jigdoFile)) {
+            imagePath = strdup(jigdo.imageName);
+        } else {
+            imagePath = dircat(jigdoDir, jigdo.imageName);
+        }
     }
 
     if (!imagePath) {
@@ -498,6 +572,15 @@ done:
 
     if (fd >= 0) {
         close(fd);
+    }
+
+    if (mirrors) {
+        int i;
+
+        for (i = 0; i < numMirrors; i++) {
+            free(mirrors[i]);
+        }
+        free(mirrors);
     }
 
     fetch_cleanup();
