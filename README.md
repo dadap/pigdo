@@ -102,5 +102,3 @@ Missing features include, but are not limited to:
 * Pigdo is intended to allow searching for matching files in local directories.
 * Pigdo is intended to allow caching downloaded files locally, in addition to
   assembling them directly into the target output file.
-* Pigdo is intended to support writing a log file while reconstruction is in
-  progress, to allow interrupted downloads to be resumed later.

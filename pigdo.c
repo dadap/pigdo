@@ -252,14 +252,27 @@ static void *fetch_worker(void *args)
 
 /*
  * @brief Sum up the total size of all file parts combined
+ *
+ * @param table Table containing files with sizes to sum
+ * @param incomplete If non-NULL, total size of incomplete files is stored here
+ *
+ * @return Sum of the sizes of all files in @p table
  */
-static size_t fileSizeTotal(const templateDescTable *table)
+static size_t fileSizeTotal(const templateDescTable *table,
+                            size_t *incomplete)
 {
     int i;
     size_t ret = 0;
 
+    if (incomplete) {
+        *incomplete  = 0;
+    }
+
     for (i = 0; i < table->numFiles; i++) {
         ret += table->files[i].size;
+        if (incomplete && table->files[i].status != COMMIT_STATUS_COMPLETE) {
+            *incomplete += table->files[i].size;
+        }
     }
 
     return ret;
@@ -276,13 +289,60 @@ static int fileRevSizeCmp(const void *a, const void *b)
     return fileB->size - fileA->size;
 }
 
+/*
+ * @brief Scan a partially downloaded file and mark valid files as complete
+ *
+ * @param fd An open file descriptor to the file to scan
+ * @param table Table with templateFileEntry records to verify and mark complete
+ *
+ * @return Number of verified files, or -1 on error
+ */
+static int verifyPartial(int fd, templateDescTable *table)
+{
+    int i, complete = 0;
+
+    if (!table->existingFile) {
+        return 0;
+    }
+
+    printf("Verifying partially downloaded file:\n");
+
+    for (i = 0; i < table->numDataBlocks; i++) {
+        void *map;
+
+        map = mmap(NULL, table->files[i].size + pagemod(table->files[i].offset),
+                   PROT_READ, MAP_SHARED, fd, pagebase(table->files[i].offset));
+        if (map == MAP_FAILED) {
+            return -1;
+        }
+
+        if (verifyChunkMD5(map + pagemod(table->files[i].offset),
+                           table->files + i)) {
+            table->files[i].status = COMMIT_STATUS_COMPLETE;
+            complete++;
+        }
+
+        if (munmap(map, table->files[i].size + pagemod(table->files[i].offset))
+            != 0) {
+            return -1;
+        }
+
+        printf("\r%d out of %d files OK", complete, table->numFiles);
+        fflush(stdout);
+    }
+
+    printf("\n");
+
+    return complete;
+}
+
 static bool pfetch(int fd, int numThreads, jigdoData jigdo,
                    templateDescTable table)
 {
     bool ret = false;
     int i, contiguousComplete, completedFiles = -1;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
-    size_t fileBytes;
+    size_t fileBytes, fileIncompleteBytes;
     md5Checksum fileChecksum;
 
     workerState = calloc(numThreads, sizeof(workerState[0]));
@@ -302,11 +362,18 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
         goto done;
     }
 
-    contiguousComplete = 0;
-    fileBytes = fileSizeTotal(&table);
+    if (table.existingFile) {
+        completedFiles = verifyPartial(fd, &table);
+        if (completedFiles < 0) {
+            goto done;
+        }
+    }
 
-    printf("\nNeed to fetch %d files (%zu kBytes total).\n", table.numFiles,
-           fileBytes);
+    contiguousComplete = 0;
+    fileBytes = fileSizeTotal(&table, &fileIncompleteBytes);
+
+    printf("\nNeed to fetch %d files (%zu kBytes total).\n",
+           table.numFiles - completedFiles, fileIncompleteBytes / 1024);
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
@@ -547,15 +614,19 @@ int main(int argc, char * const * argv)
         goto done;
     }
 
+    if (lseek(fd, 0, SEEK_END) < table.imageInfo.size) {
 #if __APPLE__
-    /* Poor man's fallocate(2) for Mac OS X - much slower than the real thing */
-    resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
+        /* Poor man's fallocate(2) for Mac OS X */
+        resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
 #else
-    resize = (posix_fallocate(fd, 0, table.imageInfo.size) == 0);
+        resize = (posix_fallocate(fd, 0, table.imageInfo.size) == 0);
 #endif
-    if (!resize) {
-        fprintf(stderr, "Failed to allocate disk space for image file\n");
-        goto done;
+        if (!resize) {
+            fprintf(stderr, "Failed to allocate disk space for image file\n");
+            goto done;
+        }
+    } else {
+        table.existingFile = true;
     }
 
     if (!writeDataFromTemplate(fp, fd, &table)) {

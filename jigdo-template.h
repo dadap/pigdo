@@ -77,7 +77,7 @@ typedef struct {
                                      ///< be initialized to 0 when entry type is
                                      ///< TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE.
     md5Checksum md5Sum;              ///< MD5 sum of the component file
-    commitStatus status;
+    commitStatus status;             ///< Status of restoring this file
 } templateFileEntry;
 
 /**
@@ -89,6 +89,7 @@ typedef struct {
     int numDataBlocks;                ///< Count of non-file data blocks
     templateFileEntry *files;         ///< Files to reassemble
     int numFiles;                     ///< Count of files
+    bool existingFile;                ///< Set if output file already exists
 } templateDescTable;
 
 /**
