@@ -323,9 +323,9 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
              * spam in case \r doesn't work as intended. */
             if (completedFiles != newCompletedFiles) {
                 completedFiles = newCompletedFiles;
-                printf("Downloading files... %d of %d files "
-                       "(%zu/%zu kB) complete.            \r", completedFiles,
-                       table.numFiles, bytes / 1024, fileBytes / 1024);
+                printf("\r%d of %d files (%zu/%zu kB) downloaded",
+                       completedFiles, table.numFiles, bytes / 1024,
+                       fileBytes / 1024);
                 fflush(stdout);
             }
 
@@ -359,7 +359,7 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
         usleep(123456); // No need to keep the CPU spinning in a tight loop
     }
 
-    printf("All parts downloaded. Performing final MD5 verification check...");
+    printf("\rAll parts downloaded. Performing final MD5 verification check…");
     fflush(stdout);
 
     fileChecksum = md5Fd(fd);
