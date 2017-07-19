@@ -514,6 +514,7 @@ int main(int argc, char * const * argv)
 
     for (i = 0; i < numMirrors; i++) {
         if (!addServerMirror(&jigdo, mirrors[i])) {
+            fprintf(stderr, "Invalid mirror specification '%s'\n", mirrors[i]);
             goto done;
         }
     }
@@ -568,6 +569,10 @@ int main(int argc, char * const * argv)
     ret = 0;
 
 done:
+    if (ret != 0) {
+        fprintf(stderr, "Reconstruction failed!\n");
+    }
+
     /* Clean up */
     if (fp) {
         fclose(fp);

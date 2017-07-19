@@ -436,11 +436,15 @@ bool addServerMirror(jigdoData *data, char *servermirror)
     if (c) *c = 0;
 
     mirror = trimWhitespace(getEqualValue(servermirror));
-    if (!mirror) {
+    if (!mirror || !mirror[0]) {
         return false;
     }
 
     serverName = trimWhitespace(getKey(servermirror, '='));
+    if (!serverName || !serverName[0]) {
+        return false;
+    }
+
     s = getServer(data, serverName);
 
     if (!s) {
