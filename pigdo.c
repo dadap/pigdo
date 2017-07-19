@@ -228,7 +228,7 @@ static void *fetch_worker(void *args)
                    pagebase(a->chunk->offset));
         if (out == MAP_FAILED) {
             setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
-            return NULL;
+            goto done;
         }
 
         setStatus(a->chunk, COMMIT_STATUS_IN_PROGRESS);
@@ -246,6 +246,9 @@ static void *fetch_worker(void *args)
     } else {
         setStatus(a->chunk, COMMIT_STATUS_FATAL_ERROR);
     }
+
+done:
+    free(uri);
 
     return NULL;
 }
