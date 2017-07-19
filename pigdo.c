@@ -423,7 +423,7 @@ int main(int argc, char * const * argv)
     bool resize;
     char *jigdoFile = NULL, *jigdoDir, *templatePath = NULL, *imagePath = NULL;
     int numThreads = 16, opt;
-    char **mirrors;
+    char **mirrors = NULL;
     int numMirrors = 0;
     const char *progName = argv[0];
 
