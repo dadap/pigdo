@@ -339,6 +339,9 @@ static int verifyPartial(int fd, templateDescTable *table)
     return complete;
 }
 
+/*
+ * @brief Kick off worker threads to download files to @p fd
+ */
 static bool pfetch(int fd, int numThreads, jigdoData jigdo,
                    templateDescTable table)
 {
@@ -458,6 +461,9 @@ done:
 
 static const int defaultNumThreads = 16;
 
+/*
+ * @brief print a usage message and exit
+ */
 void usage(const char *progName)
 {
     fprintf(stderr,
@@ -482,6 +488,7 @@ void usage(const char *progName)
             "                 a URI where file paths in the .jigdo file will\n"
             "                 be mapped\n",
             progName, defaultNumThreads);
+    exit(1);
 }
 
 int main(int argc, char * const * argv)
@@ -521,12 +528,10 @@ int main(int argc, char * const * argv)
             case 'j':
                 if (sscanf(optarg, "%d", &numThreads) != 1 || numThreads < 0 ) {
                     usage(progName);
-                    goto done;
                 }
                 break;
             default:
                 usage(progName);
-                goto done;
         }
     }
     argc -= optind;
@@ -534,7 +539,6 @@ int main(int argc, char * const * argv)
 
     if (argc < 1) {
         usage(progName);
-        goto done;
     }
 
     if (!fetch_init()) {
