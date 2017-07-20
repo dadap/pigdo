@@ -550,7 +550,7 @@ int main(int argc, char * const * argv)
             printMd5Sum(jigdo.templateMD5);
             printf("\n");
     } else {
-            fprintf(stderr, "Failed to read jigdo file '%s'\n", argv[1]);
+            fprintf(stderr, "Failed to read jigdo file '%s'\n", jigdoFile);
             goto done;
     }
 
