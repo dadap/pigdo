@@ -45,17 +45,20 @@ Pigdo has dependencies upon:
 * zlib and libbz2, for decompressing bzip2, zlib, and gzip streams
 * POSIX Threads
 * Doxygen, for generating source code documentation (optional)
+* GNU Autotools (including the Autoconf Archive), if building from git
 
-The included makefile should work to build pigdo on most UNIX-like systems.
-Pigdo has been tested on GNU/Linux, Mac OS X, and FreeBSD. The makefile only
-works with GNU make on FreeBSD for now, but I'll either try to fix it so that it
-works with both GNU and BSD make, or port the build to a meta-build system to
-generate the appropriate makefile, and add feature tests for the dependencies
-and for a few not entirely portable libc extensions that pigdo benefits from.
+The standard GNU autotools workflow will build and install pigdo from the source
+tarball, i.e.:
 
-Running make with the default target should produce a single executable, "pigdo"
-in the top-level directory. There is currently no makefile target to install
-pigdo.
+    # ./configure
+    # make
+    # make install
+
+The install step is optional: the pigdo executable may be run directly from the
+source directory once it is built.
+
+Note that the ./configure script is not checked into the git repository; the
+standard autotools workflow for regenerating ./configure is needed.
 
 Usage
 -----
@@ -74,8 +77,8 @@ Documentation
 
 Currently, the only documentation for pigdo is this README file and the source
 code. The source is commented in a Doxygen-compatible style, and documentation
-may be generated from the source code using Doxygen by building the "docs"
-target in the Makefile.
+may be generated from the source code using Doxygen by running doxygen from the
+source directory.
 
 Copying
 -------
