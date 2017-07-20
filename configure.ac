@@ -20,7 +20,7 @@ AC_CONFIG_HEADERS([config.h])
 dnl Set correct flags for pthread support, uses ax_pthread.m4 from the archive
 AX_PTHREAD
 LIBS="$PTHREAD_LIBS $LIBS"
-CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS -Wall -Werror"
 CC="$PTHREAD_CC"
 
 AC_OUTPUT
