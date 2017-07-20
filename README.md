@@ -7,7 +7,7 @@ Introduction
 pigdo is a program for reconstructing files that have been distributed in jigdo
 format. For more information about the original jigdo project, see:
 
-http://atterer.org/jigdo/
+[http://atterer.org/jigdo/](http://atterer.org/jigdo/)
 
 The primary motivation behind pigdo is to provide a jigdo download client that
 is more efficient than the existing "jigdo-lite" and "jigit" jigdo download
@@ -47,12 +47,17 @@ Pigdo has dependencies upon:
 * Doxygen, for generating source code documentation (optional)
 * GNU Autotools (including the Autoconf Archive), if building from git
 
-The standard GNU autotools workflow will build and install pigdo from the source
+If any of these dependencies (apart from Autotools if you are building from a
+tarball, or Doxygen) are missing, pigdo may still build successfully, but might
+be limited in functionality to the point that it is unable to process .jigdo
+files.
+
+The standard GNU Autotools workflow will build and install pigdo from the source
 tarball, i.e.:
 
-    # ./configure
-    # make
-    # make install
+1. ./configure
+2. make
+3. make install
 
 The install step is optional: the pigdo executable may be run directly from the
 source directory once it is built.
@@ -63,14 +68,15 @@ standard autotools workflow for regenerating ./configure is needed.
 Usage
 -----
 
-Pigdo currently takes a single argument, a path to a .jigdo file. Pigdo will
-infer the path to the .template file based on the template file path stored in
-the .jigdo file, and resolve it relative to the .jigdo file's location. Pigdo
-will then begin reconstructing the original target file, using the filename
-stored in the .jigdo file, and save it relative to the .jigdo file's location.
+Pigdo takes, at a minimum, a single argument: a path to a .jigdo file. This may
+be located on your filesystem, or it may be a URI to a remote location. In the
+absence of any other arguments, pigdo will get the locations of the .template
+file and the output file, and the locations to search for matching files from
+the .jigdo file. These values can be supplemented or overridden using optional
+command line arguments.
 
-In the near future, command line options will be added to allow finer-grained
-control over the locations of the files and several runtime options.
+For more detail on the individual command line options, run pigdo without any
+arguments to print a help message.
 
 Documentation
 -------------
