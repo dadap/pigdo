@@ -472,7 +472,7 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
                 }
             }
         }
-        usleep(123456); // No need to keep the CPU spinning in a tight loop
+        usleep(12345); // No need to keep the CPU spinning in a tight loop
     }
 
     printf("\rAll parts assembled. Performing final MD5 verification check...");
