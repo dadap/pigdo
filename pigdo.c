@@ -477,7 +477,7 @@ void usage(const char *progName)
             "                 file was fetched remotely\n\n"
             "-t | --template: location of the .template file\n"
             "                 default: use filename specified in the .jigdo\n"
-            "                 file, resolved relative to the location of the "
+            "                 file, resolved relative to the location of the\n"
             "                 .jigdo file\n\n"
             "-j | --threads:  number of simultaneous download threads\n"
             "                 default: %d\n\n"
