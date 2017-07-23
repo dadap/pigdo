@@ -65,6 +65,7 @@ typedef enum {
     COMMIT_STATUS_COMPLETE,        ///< Successfully completed
     COMMIT_STATUS_ERROR,           ///< Attempted, but an error occurred
     COMMIT_STATUS_FATAL_ERROR,     ///< An error occurred, will not retry
+    COMMIT_STATUS_LOCAL_COPY,      ///< Local copy found, but not copied yet
 } commitStatus;
 
 /**

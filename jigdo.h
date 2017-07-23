@@ -106,4 +106,25 @@ char *md5ToURI(jigdoData *data, md5Checksum md5);
  * @return true on success; false if an error occurred
  */
 bool addServerMirror(jigdoData *data, char *servermirror);
+
+/**
+ * @brief Search for @p file in local directories
+ *
+ * @return Index (in file::server) to first local directory containing a match,
+ *         or -1 if no match found
+ */
+int findLocalCopy(const jigdoFileInfo *file);
+
+/**
+ * @brief Locate a jigdoFileInfo record in @p data based on @key
+ *
+ * @param data The jigdoData record containing the jigdoFileInfo array to search
+ * @param key The MD5 checksum to match within @data
+ * @param numFound returns the count of matching records to the caller
+ *
+ * @return The address to the first jigdoFileInfo record in @p data that matches
+ * the MD5 checksum in @p key
+ */
+jigdoFileInfo *findFileByMD5(const jigdoData *data, md5Checksum key,
+                             int *numFound);
 #endif

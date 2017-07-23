@@ -145,7 +145,8 @@ static commitStatus getStatus(templateFileEntry *chunk)
 static bool isWaitingFileNoMutex(templateFileEntry *chunk)
 {
     return (chunk->status == COMMIT_STATUS_NOT_STARTED ||
-            chunk->status == COMMIT_STATUS_ERROR);
+            chunk->status == COMMIT_STATUS_ERROR ||
+            chunk->status == COMMIT_STATUS_LOCAL_COPY);
 }
 
 /**
@@ -310,8 +311,13 @@ static int verifyPartial(int fd, templateDescTable *table)
 
     printf("Verifying partially downloaded file:\n");
 
-    for (i = 0; i < table->numDataBlocks; i++) {
+    for (i = 0; i < table->numFiles; i++) {
         void *map;
+
+        // Ignore files that were found locally
+        if (table->files[i].status == COMMIT_STATUS_LOCAL_COPY) {
+            continue;
+        }
 
         map = mmap(NULL, table->files[i].size + pagemod(table->files[i].offset),
                    PROT_READ, MAP_SHARED, fd, pagebase(table->files[i].offset));
@@ -339,6 +345,38 @@ static int verifyPartial(int fd, templateDescTable *table)
     return complete;
 }
 
+/**
+ * @brief Populate @p fd with any local matches for files making up @p jigdo
+ *
+ * @param fd An open file descriptor to the output file
+ * @param jigdo Parsed data for the .jigdo file
+ *
+ * @return Number of locally matched files, or -1 on error
+ */
+static int findLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo)
+{
+    int count, i, n;
+
+    for (count = i = 0; i < table->numFiles; i++) {
+        jigdoFileInfo *file = findFileByMD5(jigdo, table->files[i].md5Sum, &n);
+        int localDirIndex;
+
+        if (!file) {
+            return -1;
+        }
+
+        localDirIndex = findLocalCopy(file);
+
+        if (localDirIndex >= 0) {
+            file->localMatch = localDirIndex;
+            count++;
+            table->files[i].status = COMMIT_STATUS_LOCAL_COPY;
+        }
+    }
+
+    return count;
+}
+
 /*
  * @brief Kick off worker threads to download files to @p fd
  */
@@ -346,7 +384,7 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
                    templateDescTable table)
 {
     bool ret = false;
-    int i, contiguousComplete, completedFiles = -1;
+    int i, contiguousComplete, completedFiles = 0, localFiles = 0;
     struct { pthread_t tid; workerArgs args; } *workerState = NULL;
     size_t fileBytes, fileIncompleteBytes;
     md5Checksum fileChecksum;
@@ -368,18 +406,23 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
         goto done;
     }
 
-    if (table.existingFile) {
-        completedFiles = verifyPartial(fd, &table);
-        if (completedFiles < 0) {
-            goto done;
-        }
+    localFiles = findLocalFiles(fd, &table, &jigdo);
+    if (localFiles > 0) {
+        printf("%d files were found locally and do not need to be fetched.\n",
+               localFiles);
+    }
+
+    completedFiles = verifyPartial(fd, &table);
+    if (completedFiles < 0) {
+        goto done;
     }
 
     contiguousComplete = 0;
     fileBytes = fileSizeTotal(&table, &fileIncompleteBytes);
 
     printf("\nNeed to fetch %d files (%zu kBytes total).\n",
-           table.numFiles - completedFiles, fileIncompleteBytes / 1024);
+           table.numFiles - completedFiles - localFiles,
+           fileIncompleteBytes / 1024);
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
@@ -396,7 +439,7 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
              * spam in case \r doesn't work as intended. */
             if (completedFiles != newCompletedFiles) {
                 completedFiles = newCompletedFiles;
-                printf("\r%d of %d files (%zu/%zu kB) downloaded",
+                printf("\r%d of %d files (%zu/%zu kB) done",
                        completedFiles, table.numFiles, bytes / 1024,
                        fileBytes / 1024);
                 fflush(stdout);
@@ -432,7 +475,7 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
         usleep(123456); // No need to keep the CPU spinning in a tight loop
     }
 
-    printf("\rAll parts downloaded. Performing final MD5 verification check…");
+    printf("\rAll parts assembled. Performing final MD5 verification check...");
     fflush(stdout);
 
     fileChecksum = md5Fd(fd);
@@ -484,8 +527,8 @@ void usage(const char *progName)
             "-m | --mirror:   map a mirror name to a URI in 'mirror=path'\n"
             "                 format, where 'mirror' is the name of a mirror\n"
             "                 as specified in the .jigdo file, and 'path' is\n"
-            "                 a URI where file paths in the .jigdo file will\n"
-            "                 be mapped\n",
+            "                 a remote URI or local path where file paths in\n"
+            "                 the .jigdo file will be mapped\n",
             progName, defaultNumThreads);
     exit(1);
 }
@@ -516,7 +559,6 @@ int main(int argc, char * const * argv)
             case 'm':
                 mirrors = realloc(mirrors, (numMirrors + 1) * sizeof(char *));
                 mirrors[numMirrors++] = strdup(optarg);
-                // TODO still need to add these to the jigdoData struct later
                 break;
             case 'o':
                 imagePath = strdup(optarg);

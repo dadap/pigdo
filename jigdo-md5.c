@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "jigdo-md5.h"
 #include "md5.h"
@@ -227,4 +228,21 @@ md5Checksum md5Fd(int fd)
 fail:
     memset(&ret, 0xff, sizeof(ret));
     return ret;
+}
+
+md5Checksum md5Path(const char *path)
+{
+    md5Checksum ret;
+    int fd = open(path, O_RDONLY);
+
+    if (fd >= 0) {
+        ret = md5Fd(fd);
+        if (close(fd) < 0) {
+            memset(&ret, 0xff, sizeof(ret));
+        }
+        return ret;
+    } else {
+        memset(&ret, 0xff, sizeof(ret));
+        return ret;
+    }
 }

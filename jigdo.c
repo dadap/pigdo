@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <assert.h>
+#include <unistd.h>
+#include <sys/param.h>
 
 #include "jigdo.h"
 #include "util.h"
@@ -451,14 +453,60 @@ bool addServerMirror(jigdoData *data, char *servermirror)
         return false;
     }
 
-    i = s->numMirrors++;
-    s->mirrors = realloc(s->mirrors, sizeof(s->mirrors[i]) * s->numMirrors);
-    if (!s->mirrors) {
-        return false;
-    }
-    s->mirrors[i] = strdup(mirror);
+    switch (isURI(mirror)) {
+        const char *prefix = "";
+        char *path;
+        size_t len;
 
-    return s->mirrors[i] != NULL;
+        // file:// URI or local directory
+        case URI_TYPE_NONE:
+            // XXX Ensure the local path is formatted in the form of a file://
+            // URI, so that libcurl can treat it just like any other URI. It
+            // might be useful to perform the transformation the other way,
+            // i.e., remove "file://" from the beginning of the path if it's
+            // there, and take a non-libcurl path, to make it possible for pigdo
+            // to be built without libcurl support for those who only wish to
+            // use it for assembly from local mirrors.
+            prefix = "file://";
+            // fall through
+        case URI_TYPE_FILE:
+
+            len = PATH_MAX + strlen(prefix);
+
+            path = calloc(len + 1, 1);
+            if (!path) {
+                return false;
+            }
+
+            strncat(path, prefix, len);
+            if (realpath(mirror, path + strlen(prefix)) == NULL) {
+                free(path);
+                return false;
+            }
+
+            i = s->numLocalDirs++;
+            s->localDirs = realloc(s->localDirs,
+                                   sizeof(s->localDirs[i]) * s->numLocalDirs);
+            if (!s->localDirs) {
+                free(path);
+                return false;
+            }
+            s->localDirs[i] = path;
+
+            return true;
+
+        // non-local URI
+        default:
+            i = s->numMirrors++;
+            s->mirrors = realloc(s->mirrors,
+                                 sizeof(s->mirrors[i]) * s->numMirrors);
+            if (!s->mirrors) {
+                return false;
+            }
+            s->mirrors[i] = strdup(mirror);
+
+            return s->mirrors[i] != NULL;
+    }
 }
 
 /**
@@ -574,18 +622,8 @@ done:
     return ret;
 }
 
-/**
- * @brief Locate a jigdoFileInfo record in @p data based on @key
- *
- * @param data The jigdoData record containing the jigdoFileInfo array to search
- * @param key The MD5 checksum to match within @data
- * @param numFound returns the count of matching records to the caller
- *
- * @return The address to the first jigdoFileInfo record in @p data that matches
- * the MD5 checksum in @p key
- */
-static jigdoFileInfo *findFileByMD5(const jigdoData *data,
-                                    md5Checksum key, int *numFound)
+jigdoFileInfo *findFileByMD5(const jigdoData *data, md5Checksum key,
+                             int *numFound)
 {
     jigdoFileInfo keyFile, *found;
 
@@ -618,6 +656,29 @@ static jigdoFileInfo *findFileByMD5(const jigdoData *data,
     return found;
 }
 
+int findLocalCopy(const jigdoFileInfo *file)
+{
+    int i;
+
+    for (i = 0; i < file->server->numLocalDirs; i++) {
+        char *fileURI = dircat(file->server->localDirs[i], file->path);
+        char *path = fileURI + strlen("file://"); // prepended to localDirs[i]
+        bool found = false;
+
+        if (access(path, F_OK) == 0) {
+            md5Checksum md5 = md5Path(path);
+            found = (md5Cmp(&md5, &(file->md5Sum)) == 0);
+        }
+
+        free(fileURI);
+        if (found) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 /**
  * @brief Choose a mirror where @p file can be found
  *
@@ -625,6 +686,10 @@ static jigdoFileInfo *findFileByMD5(const jigdoData *data,
  */
 static char *selectMirror(const jigdoFileInfo *file)
 {
+    if (file->localMatch >= 0) {
+        return file->server->localDirs[file->localMatch];
+    }
+
     // TODO should probably keep track of mirror performance and prioritize
     // faster ones, and also honor things like --try-last
     return file->server->mirrors[rand() % file->server->numMirrors];

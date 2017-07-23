@@ -64,7 +64,7 @@ void printMd5Sum(md5Checksum md5);
 md5Checksum md5MemOneShot(const void *in, size_t len);
 
 /**
- * @brief compute an MD5 checksum for a file
+ * @brief compute an MD5 checksum for a file by file descriptor
  *
  * @param fd An open file descriptor to the file to checksum
  *
@@ -72,4 +72,14 @@ md5Checksum md5MemOneShot(const void *in, size_t len);
  *         be set to 1.
  */
 md5Checksum md5Fd(int fd);
+
+/**
+ * @brief compute an MD5 checksum for a file by path
+ *
+ * @param path The path of the file to checksum
+ *
+ * @return The MD5 checksum. If an error occurred, all bits in the checksum will
+ *         be set to 1.
+ */
+md5Checksum md5Path(const char *path);
 #endif
