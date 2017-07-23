@@ -382,7 +382,7 @@ static int findLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo)
     return count;
 }
 
-static const int defaultNumThreads = 16;
+#define defaultNumThreads 16
 
 static struct { pthread_t tid; workerArgs args; } *workerState = NULL;
 static int numWorkers = defaultNumThreads;
