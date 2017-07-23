@@ -32,6 +32,7 @@
 #include "jigdo-md5.h"
 #include "fetch.h"
 #include "util.h"
+#include "config.h"
 
 static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management
 static pthread_mutex_t workerLock; ///< @brief Lock on worker state
@@ -723,11 +724,11 @@ int main(int argc, char * const * argv)
     }
 
     if (lseek(fd, 0, SEEK_END) < table.imageInfo.size) {
-#if __APPLE__
-        /* Poor man's fallocate(2) for Mac OS X */
-        resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
-#else
+#ifdef HAVE_POSIX_FALLOCATE
         resize = (posix_fallocate(fd, 0, table.imageInfo.size) == 0);
+#else
+        /* Poor man's fallocate(2); much slower than the real thing */
+        resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
 #endif
         if (!resize) {
             fprintf(stderr, "Failed to allocate disk space for image file\n");
