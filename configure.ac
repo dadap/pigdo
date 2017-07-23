@@ -1,9 +1,11 @@
 dnl Initialize autotools
 AC_INIT([pigdo], [0.0])
-AM_INIT_AUTOMAKE([-Wall -Werror foreign])
+AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 
 dnl Check toolchain
 AC_PROG_CC
+AC_PROG_RANLIB
+AM_PROG_AR
 
 dnl Check for libraries:
 AC_CHECK_LIB([z], [inflate])

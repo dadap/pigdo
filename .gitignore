@@ -1,13 +1,16 @@
 .*.sw[op]
+*.a
 *.o
 *~
 pigdo
 html/
 latex/
 .deps/
+INSTALL
 Makefile
 Makefile.in
 aclocal.m4
+ar-lib
 autom4te.cache/
 compile
 config.h
@@ -21,3 +24,4 @@ depcomp
 install-sh
 missing
 stamp-h1
+libigdo/.dirstamp

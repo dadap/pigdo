@@ -28,11 +28,12 @@
 #include <getopt.h>
 #include <signal.h>
 
-#include "jigdo.h"
-#include "jigdo-template.h"
-#include "jigdo-md5.h"
-#include "fetch.h"
-#include "util.h"
+#include "libigdo/jigdo.h"
+#include "libigdo/jigdo-template.h"
+#include "libigdo/jigdo-md5.h"
+#include "libigdo/fetch.h"
+#include "libigdo/util.h"
+
 #include "config.h"
 
 static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management

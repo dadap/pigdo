@@ -1,18 +1,21 @@
 bin_PROGRAMS = pigdo
-pigdo_SOURCES = \
-    decompress.c \
-    fetch.c \
-    jigdo.c \
-    jigdo-md5.c \
-    jigdo-template.c \
-    md5.c \
-    pigdo.c \
-    util.c \
-    config.h \
-    fetch.h \
-    jigdo-template.h \
-    md5.h \
-    decompress.h \
-    jigdo-md5.h \
-    jigdo.h \
-    util.h
+pigdo_SOURCES = pigdo.c
+pigdo_LDADD = libigdo/libigdo.a
+
+noinst_LIBRARIES = libigdo/libigdo.a
+libigdo_libigdo_a_SOURCES = \
+    libigdo/decompress.c \
+    libigdo/fetch.c \
+    libigdo/jigdo.c \
+    libigdo/jigdo-md5.c \
+    libigdo/jigdo-template.c \
+    libigdo/md5.c \
+    libigdo/util.c \
+    libigdo/config.h \
+    libigdo/fetch.h \
+    libigdo/jigdo-template.h \
+    libigdo/md5.h \
+    libigdo/decompress.h \
+    libigdo/jigdo-md5.h \
+    libigdo/jigdo.h \
+    libigdo/util.h
