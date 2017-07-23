@@ -63,10 +63,12 @@ void fetch_cleanup(void);
  * @param uri The Uniform Resource Identifier of the data to fetch
  * @param out Memory location where the data should be written
  * @param outBytes Maximum amount of data to write
+ * @param fetchedBytes This will be updated with bytes fetched so far
  *
  * @return Amount of data written, or -1 on error
  */
-ssize_t fetch(const char *uri, void *out, size_t outBytes);
+ssize_t fetch(const char *uri, void *out, size_t outBytes,
+              ssize_t *fetchedBytes);
 
 /**
  * @brief Open a file for read, fetching it from a remote location if necessary

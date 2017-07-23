@@ -26,22 +26,23 @@ static bool initialized = false;
  * @brief Arguments for the custom @c CURLOPT_WRITEFUNCTION callback
  */
 typedef struct {
-    void *base;      ///< Start of the output buffer
-    size_t written;  ///< Bytes written so far
-    size_t capacity; ///< Total capacity of the output buffer
+    void *base;       ///< Start of the output buffer
+    ssize_t *written; ///< Bytes written so far
+    size_t capacity;  ///< Total capacity of the output buffer
 } memInfo;
 
 static size_t fetchToMem(void *in, size_t size, size_t nmemb, void *private)
 {
     memInfo *info = (memInfo *) private;
     size_t wanted = size * nmemb;
+    ssize_t *written = info->written;
 
-    if (wanted + info->written > info->capacity) {
+    if (wanted + *written > info->capacity) {
         return 0;
     }
 
-    memcpy(info->base + info->written, in, wanted);
-    info->written += wanted;
+    memcpy(info->base + *written, in, wanted);
+    *written += wanted;
 
     return wanted;
 }
@@ -104,7 +105,8 @@ fail:
     return curl;
 }
 
-ssize_t fetch(const char *uri, void *out, size_t outBytes)
+ssize_t fetch(const char *uri, void *out, size_t outBytes,
+              ssize_t *fetchedBytes)
 {
     memInfo info;
     ssize_t ret = -1;
@@ -123,8 +125,10 @@ ssize_t fetch(const char *uri, void *out, size_t outBytes)
         goto done;
     }
 
+    *fetchedBytes = 0;
+
     info.base = out;
-    info.written = 0;
+    info.written = fetchedBytes;
     info.capacity = outBytes;
 
     if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, &info) != CURLE_OK) {
@@ -135,7 +139,7 @@ ssize_t fetch(const char *uri, void *out, size_t outBytes)
         goto done;
     }
 
-    ret = info.written;
+    ret = *fetchedBytes;
 
 done:
     if (curl) {

@@ -33,7 +33,9 @@
 #include "fetch.h"
 #include "util.h"
 
-static pthread_mutex_t tableLock; ///< @brief Lock on DESC table management
+static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management
+static pthread_mutex_t workerLock; ///< @brief Lock on worker state
+static bool lockInit = false;
 
 /**
  * @brief Determine whether any parts still need to be fetched
@@ -201,6 +203,8 @@ typedef struct {
     jigdoData *jigdo;         ///< Pointer to the parsed jigdo data
     templateFileEntry *chunk; ///< Pointer to the chunk this worker will work on
     int outFd;                ///< Pointer to the output buffer
+    ssize_t fetchedBytes;     ///< Bytes fetched so far
+    char *uri;                ///< URI being fetched
 } workerArgs;
 
 /**
@@ -218,9 +222,9 @@ static bool verifyChunkMD5(const void *buf, const templateFileEntry *chunk)
 static void *fetch_worker(void *args)
 {
     workerArgs *a = (workerArgs *) args;
-    char *uri = md5ToURI(a->jigdo, a->chunk->md5Sum);
+    a->uri = md5ToURI(a->jigdo, a->chunk->md5Sum);
 
-    if (uri) {
+    if (a->uri) {
         void *out;
         size_t fetched;
 
@@ -233,8 +237,8 @@ static void *fetch_worker(void *args)
         }
 
         setStatus(a->chunk, COMMIT_STATUS_IN_PROGRESS);
-        fetched = fetch(uri, out + pagemod(a->chunk->offset),
-                        a->chunk->size);
+        fetched = fetch(a->uri, out + pagemod(a->chunk->offset),
+                        a->chunk->size, &(a->fetchedBytes));
 
         if (fetched == a->chunk->size &&
             verifyChunkMD5(out + pagemod(a->chunk->offset), a->chunk)) {
@@ -249,7 +253,7 @@ static void *fetch_worker(void *args)
     }
 
 done:
-    free(uri);
+    free(a->uri);
 
     return NULL;
 }
@@ -377,34 +381,73 @@ static int findLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo)
     return count;
 }
 
+static const int defaultNumThreads = 16;
+
+static struct { pthread_t tid; workerArgs args; } *workerState = NULL;
+static int numWorkers = defaultNumThreads;
+
+static void printProgress(int sig)
+{
+    if (!lockInit) {
+        return;
+    }
+
+    pthread_mutex_lock(&workerLock);
+
+    if (workerState) {
+        int i;
+
+        for (i = 0; i < numWorkers; i++) {
+            if (!workerState[i].args.chunk) {
+                continue;
+            }
+
+            printf("%s: %zi/%"PRIu64" bytes\n", workerState[i].args.uri,
+                   workerState[i].args.fetchedBytes,
+                   workerState[i].args.chunk->size);
+        }
+    }
+
+    pthread_mutex_unlock(&workerLock);
+}
+
 /*
  * @brief Kick off worker threads to download files to @p fd
  */
-static bool pfetch(int fd, int numThreads, jigdoData jigdo,
-                   templateDescTable table)
+static bool pfetch(int fd, jigdoData jigdo, templateDescTable table)
 {
     bool ret = false;
     int i, contiguousComplete, completedFiles = 0, localFiles = 0;
-    struct { pthread_t tid; workerArgs args; } *workerState = NULL;
     size_t fileBytes, fileIncompleteBytes;
     md5Checksum fileChecksum;
 
-    workerState = calloc(numThreads, sizeof(workerState[0]));
+    if (pthread_mutex_init(&workerLock, NULL) == 0 &&
+        pthread_mutex_init(&tableLock, NULL) == 0) {
+        lockInit = true;
+    } else {
+        fprintf(stderr, "Failed to initialize mutex\n");
+        goto done;
+    }
+
+    pthread_mutex_lock(&workerLock);
+
+    if (workerState != NULL) {
+        goto done;
+    }
+
+    workerState = calloc(numWorkers, sizeof(workerState[0]));
     if (!workerState) {
         fprintf(stderr, "Failed to allocate worker thread state\n");
         goto done;
     }
 
-    for (i = 0; i < numThreads; i++) {
+    for (i = 0; i < numWorkers; i++) {
         workerState[i].args.jigdo = &jigdo;
         // XXX sharing fd between threads probably kills kittens
         workerState[i].args.outFd = fd;
     }
 
-    if (pthread_mutex_init(&tableLock, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize mutex\n");
-        goto done;
-    }
+    pthread_mutex_unlock(&workerLock);
 
     localFiles = findLocalFiles(fd, &table, &jigdo);
     if (localFiles > 0) {
@@ -428,7 +471,9 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
      * do not succeed upon retry. Should implement max retries limit, perhaps
      * after exhaustively searching all mirror possibilities. */
     while (partsRemain(table.files, table.numFiles, &contiguousComplete) > 0) {
-        for (i = 0; i < numThreads; i++) {
+        pthread_mutex_lock(&workerLock);
+
+        for (i = 0; i < numWorkers; i++) {
             size_t bytes;
             commitStatus status = COMMIT_STATUS_NOT_STARTED;
             int newCompletedFiles = countCompletedFiles(table.files,
@@ -471,6 +516,8 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
                     goto done;
                 }
             }
+
+            pthread_mutex_unlock(&workerLock);
         }
         usleep(12345); // No need to keep the CPU spinning in a tight loop
     }
@@ -497,12 +544,21 @@ static bool pfetch(int fd, int numThreads, jigdoData jigdo,
     fflush(stderr);
 
 done:
-    free(workerState);
+
+    if (lockInit) {
+        lockInit = false;
+
+        pthread_mutex_lock(&workerLock);
+        free(workerState);
+        workerState = NULL;
+        pthread_mutex_unlock(&workerLock);
+
+        pthread_mutex_destroy(&workerLock);
+        pthread_mutex_destroy(&tableLock);
+    }
 
     return ret;
 }
-
-static const int defaultNumThreads = 16;
 
 /*
  * @brief print a usage message and exit
@@ -541,7 +597,7 @@ int main(int argc, char * const * argv)
     int ret = 1, fd = -1, i;
     bool resize;
     char *jigdoFile = NULL, *jigdoDir, *templatePath = NULL, *imagePath = NULL;
-    int numThreads = 16, opt;
+    int opt;
     char **mirrors = NULL;
     int numMirrors = 0;
     const char *progName = argv[0];
@@ -567,7 +623,7 @@ int main(int argc, char * const * argv)
                 templatePath = strdup(optarg);
                 break;
             case 'j':
-                if (sscanf(optarg, "%d", &numThreads) != 1 || numThreads < 0 ) {
+                if (sscanf(optarg, "%d", &numWorkers) != 1 || numWorkers < 0 ) {
                     usage(progName);
                 }
                 break;
@@ -580,6 +636,10 @@ int main(int argc, char * const * argv)
 
     if (argc < 1) {
         usage(progName);
+    }
+
+    if (signal(SIGUSR1, printProgress) == SIG_ERR) {
+        goto done;
     }
 
     if (!fetch_init()) {
@@ -681,7 +741,7 @@ int main(int argc, char * const * argv)
         goto done;
     }
 
-    if (!pfetch(fd, numThreads, jigdo, table)) {
+    if (!pfetch(fd, jigdo, table)) {
         goto done;
     }
 
