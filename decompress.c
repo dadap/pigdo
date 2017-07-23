@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "decompress.h"
+#include "config.h"
 
 /**
  * @brief Decompress a bzip2 stream
@@ -31,11 +32,13 @@
 static int bunzip2MemToMem(void *in, ssize_t inBytes, void *out,
                            size_t outBytes)
 {
+#if defined HAVE_LIBBZ2
     unsigned int written = outBytes;
 
     if (BZ2_bzBuffToBuffDecompress(out, &written, in, inBytes, 0, 0) == BZ_OK) {
         return written;
     }
+#endif
 
     return -1;
 }
@@ -48,6 +51,7 @@ static int bunzip2MemToMem(void *in, ssize_t inBytes, void *out,
  */
 static int infl8(void *in, ssize_t inBytes, void *out, size_t outBytes)
 {
+#if defined HAVE_LIBZ
     bool success = false;
     z_stream z;
 
@@ -75,6 +79,9 @@ done:
     }
 
     return success ? z.total_out : -1;
+#else
+    return -1;
+#endif
 }
 
 int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
@@ -94,6 +101,7 @@ int decompressMemToMem(compressType type, void *in, ssize_t inBytes,
     }
 }
 
+#if defined HAVE_LIBZ
 /**
  * @brief Decompress a gzipped file opened on @p in and write it to @out
  *
@@ -135,9 +143,11 @@ static bool gunzipToFile(FILE *in, FILE *out)
 
     return false;
 }
+#endif
 
 bool gunzipFReplace(FILE **fp)
 {
+#if defined HAVE_LIBZ
     int fd = dup(fileno(*fp)); // Otherwise gzclose() would close *fp as well
     gzFile gz;
     bool isGz;
@@ -186,4 +196,7 @@ bool gunzipFReplace(FILE **fp)
         /* Not compressed; do nothing */
         return true;
     }
+#else
+    return false;
+#endif
 }
