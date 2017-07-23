@@ -26,6 +26,7 @@
 #include <sys/mman.h>
 #include <pthread.h>
 #include <getopt.h>
+#include <signal.h>
 
 #include "jigdo.h"
 #include "jigdo-template.h"

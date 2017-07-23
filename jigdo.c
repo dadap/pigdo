@@ -15,7 +15,7 @@
  * this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _POSIX_C_SOURCE 200809L // for getline(3)
+#define _XOPEN_SOURCE 700 // for getline(3) and realpath(3)
 
 #include <string.h>
 #include <stdlib.h>
@@ -23,6 +23,8 @@
 #include <assert.h>
 #include <unistd.h>
 #include <sys/param.h>
+#include <limits.h>
+#include <stdlib.h>
 
 #include "jigdo.h"
 #include "util.h"
