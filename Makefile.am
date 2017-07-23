@@ -1,5 +1,5 @@
 bin_PROGRAMS = pigdo
-pigdo_SOURCES = pigdo.c
+pigdo_SOURCES = pigdo.c worker.c worker.h
 pigdo_LDADD = libigdo/libigdo.a
 
 noinst_LIBRARIES = libigdo/libigdo.a
