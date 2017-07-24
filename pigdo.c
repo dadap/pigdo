@@ -84,7 +84,7 @@ int main(int argc, char * const * argv)
     char **mirrors = NULL;
     int numMirrors = 0;
     const char *progName = argv[0];
-    int numWorkers;
+    int numWorkers = defaultNumThreads;
     char md5Hex[33];
 
     static struct option opts[] = {
