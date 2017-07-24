@@ -23,6 +23,11 @@
 
 #include "jigdo-md5.h"
 
+typedef struct _templateImageInfo templateImageInfoEntry;
+typedef struct _templateData templateDataEntry;
+typedef struct _templateFile templateFileEntry;
+typedef struct _templateDescTable templateDescTable;
+
 /**
  * @brief IDs of the various types of template records.
  */
@@ -33,27 +38,6 @@ typedef enum {
     TEMPLATE_ENTRY_TYPE_IMAGE_INFO = 5,          ///< info about the image file
     TEMPLATE_ENTRY_TYPE_FILE = 6,                ///< info about a matched file
 } templateEntryType;
-
-/**
- * @brief data parsed from the final "image info" record in the DESC table
- */
-typedef struct {
-    uint64_t size;               ///< Length of the image file
-    md5Checksum md5Sum;          ///< MD5 sum of the image file
-    uint32_t rsync64SumBlockLen; ///< Length of the initial block of each file
-                                 ///< over which the rolling rsync64 sum was
-                                 ///< computed during .jigdo generation, when
-                                 ///< applicable. Initialized to 0 when using
-                                 ///< TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE.
-} templateImageInfoEntry;
-
-/**
- * @brief data parsed from a DESC table entry for unmatched data
- */
-typedef struct {
-    uint64_t size;         ///< Uncompressed length of the data block
-    off_t offset;          ///< Offset within reassembled file
-} templateDataEntry;
 
 /**
  * @brief Flags for different possible states of a part during reassembly
@@ -67,31 +51,6 @@ typedef enum {
     COMMIT_STATUS_FATAL_ERROR,     ///< An error occurred, will not retry
     COMMIT_STATUS_LOCAL_COPY,      ///< Local copy found, but not copied yet
 } commitStatus;
-
-/**
- * @brief data parsed from a DESC table entry for a matched file
- */
-typedef struct {
-    uint64_t size;                   ///< Length of the component file
-    off_t offset;                    ///< Offset within reassembled file
-    uint64_t rsync64SumInitialBlock; ///< rsync64 sum of the inital block; will
-                                     ///< be initialized to 0 when entry type is
-                                     ///< TEMPLATE_ENTRY_TYPE_FILE_OBSOLETE.
-    md5Checksum md5Sum;              ///< MD5 sum of the component file
-    commitStatus status;             ///< Status of restoring this file
-} templateFileEntry;
-
-/**
- * @brief Data parsed from a DESC table entry
- */
-typedef struct {
-    templateImageInfoEntry imageInfo; ///< Image summary information
-    templateDataEntry *dataBlocks;    ///< Non-file data in the .template stream
-    int numDataBlocks;                ///< Count of non-file data blocks
-    templateFileEntry *files;         ///< Files to reassemble
-    int numFiles;                     ///< Count of files
-    bool existingFile;                ///< Set if output file already exists
-} templateDescTable;
 
 /**
  * @brief Parse a DESC table from a @c .template file

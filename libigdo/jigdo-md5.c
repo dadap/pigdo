@@ -24,6 +24,7 @@
 #include <fcntl.h>
 
 #include "jigdo-md5.h"
+#include "jigdo-md5-private.h"
 #include "md5.h"
 
 /**

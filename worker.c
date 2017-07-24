@@ -24,8 +24,11 @@
 
 #include "worker.h"
 
+#include "libigdo/jigdo.h"
 #include "libigdo/fetch.h"
 #include "libigdo/util.h"
+#include "libigdo/jigdo-template-private.h"
+#include "libigdo/jigdo-private.h"
 
 static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management
 static bool lockInit = false;

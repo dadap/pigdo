@@ -21,9 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
-    uint32_t sum[4];
-} md5Checksum;
+typedef struct _md5 md5Checksum;
 
 /**
  * @brief decode a base64-encoded md5sum

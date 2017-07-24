@@ -30,6 +30,8 @@
 #include "util.h"
 #include "decompress.h"
 #include "fetch.h"
+#include "jigdo-md5-private.h"
+#include "jigdo-private.h"
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
@@ -300,7 +302,7 @@ static bool findPartsSection(FILE *fp)
  * @return A pointer to the existing server if found, or a newly created one
  * if not found, or NULL if an error occurred.
  */
-static server *getServer(jigdoData *data, const char *name)
+static jigdoServer *getServer(jigdoData *data, const char *name)
 {
     int i;
 
@@ -432,7 +434,7 @@ done:
 bool addServerMirror(jigdoData *data, char *servermirror)
 {
     int i;
-    server *s;
+    jigdoServer *s;
     char *c, *serverName, *mirror;
 
     // XXX nuke args like --try-last until quoting support is added

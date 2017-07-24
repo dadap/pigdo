@@ -21,6 +21,7 @@
 #include <sys/mman.h>
 
 #include "jigdo-template.h"
+#include "jigdo-template-private.h"
 #include "decompress.h"
 #include "util.h"
 

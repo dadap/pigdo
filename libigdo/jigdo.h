@@ -24,50 +24,9 @@
 
 #include "jigdo-md5.h"
 
-/**
- * @brief Correlation of a Jigdo @c [Server] with local and remote sources
- */
-typedef struct {
-    char *name;       ///< Name of the server as it appears in the .jigdo file
-    char **mirrors;   ///< List of remote mirror URIs associated with the server
-    int numMirrors;   ///< Number of remote mirrors
-    char **localDirs; ///< List of local paths containing files from the server
-    int numLocalDirs; ///< Number of local directories
-} server;
-
-/**
- * @brief Data on an individual file listed in a .jigdo file
- */
-typedef struct {
-    md5Checksum md5Sum; ///< MD5 sum of the file
-    char *path;         ///< Path relative to @c [Server] root
-    server *server;     ///< pointer to @c server struct associated with file
-    int localMatch;     ///< Index into server::localDirs where match was found;
-                        ///< negative index indicates no match found.
-} jigdoFileInfo;
-
-/**
- * @brief Data parsed from a @c .jigdo file
- */
-typedef struct {
-    /* [Jigdo] section */
-    char *version;           ///< Jigdo file format version
-    char *generator;         ///< Program used to generate @c .jigdo file
-
-    /* [Image] section */
-    char *imageName;         ///< Name of reconstructed image file
-    char *templateName;      ///< Name of jigdo @c .template file
-    md5Checksum templateMD5; ///< MD5 sum of @c .template file
-    /* TODO store ShortInfo and Info? */
-
-    /* [Parts] section */
-    jigdoFileInfo *files;    ///< Files contained in the image
-    int numFiles;            ///< Count of jigdoData::files elements
-
-    /* [Servers] section */
-    server *servers;         ///< Servers where jigdoData::files can be found
-    int numServers;          ///< Count of jigdoData::servers elements
-} jigdoData;
+typedef struct _jigdoServer jigdoServer;
+typedef struct _jigdoFile jigdoFileInfo;
+typedef struct _jigdo jigdoData;
 
 /**
  * @brief Parse data from a @c .jigdo file
