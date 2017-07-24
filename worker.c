@@ -28,7 +28,6 @@
 #include "libigdo/util.h"
 
 static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management
-static pthread_mutex_t workerLock; ///< @brief Lock on worker state
 static bool lockInit = false;
 
 /**
@@ -369,12 +368,6 @@ static int numWorkers = defaultNumThreads;
 
 static void printProgress(int sig)
 {
-    if (!lockInit) {
-        return;
-    }
-
-    pthread_mutex_lock(&workerLock);
-
     if (workerState) {
         int i;
 
@@ -389,8 +382,6 @@ static void printProgress(int sig)
                    workerState[i].args.chunk->size);
         }
     }
-
-    pthread_mutex_unlock(&workerLock);
 }
 
 /*
@@ -405,15 +396,12 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
 
     numWorkers = workers;
 
-    if (pthread_mutex_init(&workerLock, NULL) == 0 &&
-        pthread_mutex_init(&tableLock, NULL) == 0) {
+    if (pthread_mutex_init(&tableLock, NULL) == 0) {
         lockInit = true;
     } else {
         fprintf(stderr, "Failed to initialize mutex\n");
         goto done;
     }
-
-    pthread_mutex_lock(&workerLock);
 
     if (signal(SIGUSR1, printProgress) == SIG_ERR) {
         goto done;
@@ -434,8 +422,6 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
         // XXX sharing fd between threads probably kills kittens
         workerState[i].args.outFd = fd;
     }
-
-    pthread_mutex_unlock(&workerLock);
 
     localFiles = findLocalFiles(fd, &table, &jigdo);
     if (localFiles > 0) {
@@ -459,7 +445,6 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
      * do not succeed upon retry. Should implement max retries limit, perhaps
      * after exhaustively searching all mirror possibilities. */
     while (partsRemain(table.files, table.numFiles, &contiguousComplete) > 0) {
-        pthread_mutex_lock(&workerLock);
 
         for (i = 0; i < numWorkers; i++) {
             size_t bytes;
@@ -505,7 +490,6 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
                 }
             }
 
-            pthread_mutex_unlock(&workerLock);
         }
         usleep(12345); // No need to keep the CPU spinning in a tight loop
     }
@@ -536,14 +520,11 @@ done:
     if (lockInit) {
         lockInit = false;
 
-        pthread_mutex_lock(&workerLock);
-        free(workerState);
-        workerState = NULL;
-        pthread_mutex_unlock(&workerLock);
-
-        pthread_mutex_destroy(&workerLock);
         pthread_mutex_destroy(&tableLock);
     }
+
+    free(workerState);
+    workerState = NULL;
 
     return ret;
 }
