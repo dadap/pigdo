@@ -379,7 +379,8 @@ static void printProgress(int sig)
         int i;
 
         for (i = 0; i < numWorkers; i++) {
-            if (!workerState[i].args.chunk) {
+            if (!workerState[i].args.chunk ||
+                workerState[i].args.chunk->status == COMMIT_STATUS_COMPLETE) {
                 continue;
             }
 
