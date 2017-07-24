@@ -49,9 +49,13 @@ int md5Cmp(const md5Checksum *a, const md5Checksum *b);
 
 
 /**
- * @brief print a hexadecimal string representing @p md5 to stdout
+ * @brief Convert an MD5 checksum to hexadecimal representation
+ *
+ * @param md5 The MD5 checksum to convert
+ * @param out Where the hexadecimal representation will be stored. Must be able
+ *            to store 33 characters, including a NULL terminating byte.
  */
-void printMd5Sum(md5Checksum md5);
+void md5SumToString(md5Checksum md5, char *out);
 
 /**
  * @brief compute an MD5 checksum from memory region

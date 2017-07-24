@@ -167,15 +167,17 @@ int md5Cmp(const md5Checksum *a, const md5Checksum *b)
     return memcmp(a, b, sizeof(*a));
 }
 
-void printMd5Sum(md5Checksum md5)
+void md5SumToString(md5Checksum md5, char *out)
 {
     int i;
     for (i = 0; i < (sizeof(md5) / sizeof(md5.sum[0])); i++) {
         int j;
         for (j = 0; j < sizeof(md5.sum[0]); j++) {
-            printf("%02x", *((uint8_t*) &md5.sum[i] + j));
+            sprintf(out, "%02x", *((uint8_t*) &md5.sum[i] + j));
+            out += 2;
         }
     }
+    out[0] = '\0';
 }
 
 md5Checksum md5MemOneShot(const void *in, size_t len)

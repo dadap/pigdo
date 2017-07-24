@@ -175,8 +175,6 @@ static FILE *fetchToFile(const char *path)
         goto done;
     }
 
-    printf("Fetching %s...", path);
-
     if (curl_easy_perform(curl) == CURLE_OK) {
         success = true;
     }
@@ -184,14 +182,7 @@ static FILE *fetchToFile(const char *path)
     if (success) {
         double size = -1;
 
-        printf(" done!\n");
-
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &size);
-        if (size >= 0) {
-            printf("%d bytes fetched OK.\n", (int) size);
-        }
-    } else {
-        printf(" error!\n");
     }
 
 done:

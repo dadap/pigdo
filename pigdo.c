@@ -85,6 +85,7 @@ int main(int argc, char * const * argv)
     int numMirrors = 0;
     const char *progName = argv[0];
     int numWorkers;
+    char md5Hex[33];
 
     static struct option opts[] = {
         {"mirror",      required_argument, NULL, 'm'},
@@ -131,9 +132,8 @@ int main(int argc, char * const * argv)
     if (readJigdoFile(jigdoFile, &jigdo)) {
             printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
             printf("Template filename is: %s\n", jigdo.templateName);
-            printf("Template MD5 sum is: ");
-            printMd5Sum(jigdo.templateMD5);
-            printf("\n");
+            md5SumToString(jigdo.templateMD5, md5Hex);
+            printf("Template MD5 sum is: %s\n", md5Hex);
     } else {
             fprintf(stderr, "Failed to read jigdo file '%s'\n", jigdoFile);
             goto done;
@@ -177,10 +177,10 @@ int main(int argc, char * const * argv)
     /* Download the largest files first, to maximize the parallelism */
     qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
 
+    md5SumToString(table.imageInfo.md5Sum, md5Hex);
+
     printf("Image size is: %"PRIu64" bytes\n", table.imageInfo.size);
-    printf("Image md5sum is: ");
-    printMd5Sum(table.imageInfo.md5Sum);
-    printf("\n");
+    printf("Image md5sum is: %s\n", md5Hex);
 
     if (!imagePath) {
         if (isURI(jigdoFile)) {

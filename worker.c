@@ -518,12 +518,12 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
     if (ret) {
         printf(" done!\n");
     } else {
-        printf(" error!\n");
-        printf("Expected: ");
-        printMd5Sum(table.imageInfo.md5Sum);
-        printf("; got: ");
-        printMd5Sum(fileChecksum);
-        printf("\n");
+        char expectHex[33], actualHex[33];
+
+        md5SumToString(table.imageInfo.md5Sum, expectHex);
+        md5SumToString(fileChecksum, actualHex);
+
+        printf(" error!\nExpected: %s; got %s\n", expectHex, actualHex);
         fprintf(stderr, "MD5 checksum verification failed!\n");
     }
 
