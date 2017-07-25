@@ -28,6 +28,6 @@
 /*
  * @brief Kick off worker threads to download files to @p fd
  */
-bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int numWorkers);
+bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int numWorkers);
 
 #endif

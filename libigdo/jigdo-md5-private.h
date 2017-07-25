@@ -22,4 +22,6 @@ struct _md5 {
     uint32_t sum[4];
 };
 
+#define MD5SUM_STRING_LENGTH 33
+
 #endif

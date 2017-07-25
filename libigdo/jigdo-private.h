@@ -54,6 +54,7 @@ struct _jigdo {
     char *imageName;         ///< Name of reconstructed image file
     char *templateName;      ///< Name of jigdo @c .template file
     md5Checksum templateMD5; ///< MD5 sum of @c .template file
+    char templateMD5String[MD5SUM_STRING_LENGTH];
     /* TODO store ShortInfo and Info? */
 
     /* [Parts] section */

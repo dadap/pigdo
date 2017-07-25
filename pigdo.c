@@ -29,7 +29,6 @@
 #include "libigdo/fetch.h"
 #include "libigdo/util.h"
 #include "libigdo/jigdo-template-private.h"
-#include "libigdo/jigdo-private.h"
 
 #include "worker.h"
 
@@ -78,7 +77,7 @@ void usage(const char *progName)
 int main(int argc, char * const * argv)
 {
     FILE *fp = NULL;
-    jigdoData jigdo;
+    jigdoData *jigdo;
     templateDescTable table;
     int ret = 1, fd = -1, i;
     bool resize;
@@ -89,6 +88,7 @@ int main(int argc, char * const * argv)
     const char *progName = argv[0];
     int numWorkers = defaultNumThreads;
     char md5Hex[33];
+    const char *imageName = "", *templateName = "";
 
     static struct option opts[] = {
         {"mirror",      required_argument, NULL, 'm'},
@@ -132,11 +132,13 @@ int main(int argc, char * const * argv)
 
     jigdoFile = strdup(argv[0]);
 
-    if (readJigdoFile(jigdoFile, &jigdo)) {
-            printf("Successfully read jigdo file for '%s'\n", jigdo.imageName);
-            printf("Template filename is: %s\n", jigdo.templateName);
-            md5SumToString(jigdo.templateMD5, md5Hex);
-            printf("Template MD5 sum is: %s\n", md5Hex);
+    if ((jigdo = jigdoReadJigdoFile(jigdoFile))) {
+            imageName = jigdoGetImageName(jigdo);
+            templateName = jigdoGetTemplateName(jigdo);
+
+            printf("Successfully read jigdo file for '%s'\n", imageName);
+            printf("Template filename is: %s\n", templateName);
+            printf("Template MD5 sum is: %s\n", jigdoGetTemplateMD5(jigdo));
     } else {
             fprintf(stderr, "Failed to read jigdo file '%s'\n", jigdoFile);
             goto done;
@@ -145,10 +147,10 @@ int main(int argc, char * const * argv)
     jigdoDir = dirname(jigdoFile);
 
     if (!templatePath) {
-        if (isURI(jigdo.templateName) || isAbsolute(jigdo.templateName)) {
-            templatePath = strdup(jigdo.templateName);
+        if (isURI(templateName) || isAbsolute(templateName)) {
+            templatePath = strdup(templateName);
         } else {
-            templatePath = dircat(jigdoDir, jigdo.templateName);
+            templatePath = dircat(jigdoDir, templateName);
         }
     }
 
@@ -171,7 +173,7 @@ int main(int argc, char * const * argv)
     }
 
     for (i = 0; i < numMirrors; i++) {
-        if (!addServerMirror(&jigdo, mirrors[i])) {
+        if (!addServerMirror(jigdo, mirrors[i])) {
             fprintf(stderr, "Invalid mirror specification '%s'\n", mirrors[i]);
             goto done;
         }
@@ -187,9 +189,9 @@ int main(int argc, char * const * argv)
 
     if (!imagePath) {
         if (isURI(jigdoFile)) {
-            imagePath = strdup(jigdo.imageName);
+            imagePath = strdup(imageName);
         } else {
-            imagePath = dircat(jigdoDir, jigdo.imageName);
+            imagePath = dircat(jigdoDir, imageName);
         }
     }
 
@@ -201,7 +203,7 @@ int main(int argc, char * const * argv)
     free(imagePath);
 
     if (fd < 0) {
-        fprintf(stderr, "Failed to open image file '%s'\n", jigdo.imageName);
+        fprintf(stderr, "Failed to open image file '%s'\n", imageName);
         goto done;
     }
 

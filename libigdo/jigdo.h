@@ -23,6 +23,7 @@
 #include <stdbool.h>
 
 #include "jigdo-md5.h"
+#include "jigdo-template.h"
 
 typedef struct _jigdoServer jigdoServer;
 typedef struct _jigdoFile jigdoFileInfo;
@@ -32,11 +33,10 @@ typedef struct _jigdo jigdoData;
  * @brief Parse data from a @c .jigdo file
  *
  * @param path The path to the file.
- * @param data A pointer to a jigdoData record where parsed data will be stored.
  *
- * @return @c true on success; @c false on error
+ * @return A pointer to a jigdoData record on success; NULL on error
  */
-bool readJigdoFile(const char *path, jigdoData *data);
+jigdoData *jigdoReadJigdoFile(const char *path);
 
 /**
  * @brief Free heap-allocated members of a jigdoData record
@@ -67,12 +67,14 @@ char *md5ToURI(jigdoData *data, md5Checksum md5);
 bool addServerMirror(jigdoData *data, char *servermirror);
 
 /**
- * @brief Search for @p file in local directories
+ * @brief Populate @p fd with any local matches for files making up @p jigdo
  *
- * @return Index (in file::server) to first local directory containing a match,
- *         or -1 if no match found
+ * @param fd An open file descriptor to the output file
+ * @param jigdo Parsed data for the .jigdo file
+ *
+ * @return Number of locally matched files, or -1 on error
  */
-int findLocalCopy(const jigdoFileInfo *file);
+int jigdoFindLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo);
 
 /**
  * @brief Locate a jigdoFileInfo record in @p data based on @key
@@ -86,4 +88,20 @@ int findLocalCopy(const jigdoFileInfo *file);
  */
 jigdoFileInfo *findFileByMD5(const jigdoData *data, md5Checksum key,
                              int *numFound);
+
+/**
+ * @brief Get the name of the jigdo target file
+ */
+const char *jigdoGetImageName(const jigdoData *jigdo);
+
+/**
+ * @brief Get the name of the template file
+ */
+const char *jigdoGetTemplateName(const jigdoData *jigdo);
+
+/**
+ * @brief Get the MD5 checksum of the template file
+ */
+const char *jigdoGetTemplateMD5(const jigdoData *jigdo);
+
 #endif

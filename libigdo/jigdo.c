@@ -32,6 +32,7 @@
 #include "fetch.h"
 #include "jigdo-md5-private.h"
 #include "jigdo-private.h"
+#include "jigdo-template-private.h"
 
 /**
  * @brief Trim leading and trailing whitespace from @p s
@@ -254,6 +255,8 @@ static bool freadJigdoFileImageSection(FILE *fp, jigdoData *data)
             }
         }
     } while (read >= 0 && line[0] != '[');
+
+    md5SumToString(data->templateMD5, data->templateMD5String);
 
     if (data->imageName && data->templateName) {
         ret = true;
@@ -584,10 +587,11 @@ done:
     return ret;
 }
 
-bool readJigdoFile(const char *path, jigdoData *data)
+jigdoData *jigdoReadJigdoFile(const char *path)
 {
-    int ret = false;
+    bool success = false;
     FILE *fp;
+    jigdoData *data = NULL;
 
     fp = fetchopen(path);
     if (!fp) {
@@ -598,7 +602,7 @@ bool readJigdoFile(const char *path, jigdoData *data)
         goto done;
     }
 
-    memset(data, 0, sizeof(*data));
+    data = calloc(1, sizeof(*data));
 
     if (!freadJigdoFileJigdoSection(fp, data)) {
         goto done;
@@ -616,14 +620,19 @@ bool readJigdoFile(const char *path, jigdoData *data)
         goto done;
     }
 
-    ret = true;
+    success = true;
 
 done:
     if (fp) {
         fclose(fp);
     }
 
-    return ret;
+    if (!success) {
+        free(data);
+        data = NULL;
+    }
+
+    return data;
 }
 
 jigdoFileInfo *findFileByMD5(const jigdoData *data, md5Checksum key,
@@ -660,7 +669,7 @@ jigdoFileInfo *findFileByMD5(const jigdoData *data, md5Checksum key,
     return found;
 }
 
-int findLocalCopy(const jigdoFileInfo *file)
+static int findLocalCopy(const jigdoFileInfo *file)
 {
     int i;
 
@@ -681,6 +690,30 @@ int findLocalCopy(const jigdoFileInfo *file)
     }
 
     return -1;
+}
+
+int jigdoFindLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo)
+{
+    int count, i, n;
+
+    for (count = i = 0; i < table->numFiles; i++) {
+        jigdoFileInfo *file = findFileByMD5(jigdo, table->files[i].md5Sum, &n);
+        int localDirIndex;
+
+        if (!file) {
+            return -1;
+        }
+
+        localDirIndex = findLocalCopy(file);
+
+        if (localDirIndex >= 0) {
+            file->localMatch = localDirIndex;
+            count++;
+            table->files[i].status = COMMIT_STATUS_LOCAL_COPY;
+        }
+    }
+
+    return count;
 }
 
 /**
@@ -715,4 +748,19 @@ char *md5ToURI(jigdoData *data, md5Checksum md5)
     }
 
     return dircat(mirror, fileInfo->path);
+}
+
+const char *jigdoGetImageName(const jigdoData *jigdo)
+{
+    return jigdo->imageName;
+}
+
+const char *jigdoGetTemplateName(const jigdoData *jigdo)
+{
+    return jigdo->templateName;
+}
+
+const char *jigdoGetTemplateMD5(const jigdoData *jigdo)
+{
+    return jigdo->templateMD5String;
 }

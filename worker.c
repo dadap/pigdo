@@ -28,7 +28,6 @@
 #include "libigdo/fetch.h"
 #include "libigdo/util.h"
 #include "libigdo/jigdo-template-private.h"
-#include "libigdo/jigdo-private.h"
 
 static pthread_mutex_t tableLock;  ///< @brief Lock on DESC table management
 static bool lockInit = false;
@@ -334,38 +333,6 @@ static int verifyPartial(int fd, templateDescTable *table)
     return complete;
 }
 
-/**
- * @brief Populate @p fd with any local matches for files making up @p jigdo
- *
- * @param fd An open file descriptor to the output file
- * @param jigdo Parsed data for the .jigdo file
- *
- * @return Number of locally matched files, or -1 on error
- */
-static int findLocalFiles(int fd, templateDescTable *table, jigdoData *jigdo)
-{
-    int count, i, n;
-
-    for (count = i = 0; i < table->numFiles; i++) {
-        jigdoFileInfo *file = findFileByMD5(jigdo, table->files[i].md5Sum, &n);
-        int localDirIndex;
-
-        if (!file) {
-            return -1;
-        }
-
-        localDirIndex = findLocalCopy(file);
-
-        if (localDirIndex >= 0) {
-            file->localMatch = localDirIndex;
-            count++;
-            table->files[i].status = COMMIT_STATUS_LOCAL_COPY;
-        }
-    }
-
-    return count;
-}
-
 static struct { pthread_t tid; workerArgs args; } *workerState = NULL;
 static int numWorkers = defaultNumThreads;
 
@@ -390,7 +357,7 @@ static void printProgress(int sig)
 /*
  * @brief Kick off worker threads to download files to @p fd
  */
-bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
+bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
 {
     bool ret = false;
     int i, contiguousComplete, completedFiles = 0, localFiles = 0;
@@ -421,12 +388,12 @@ bool pfetch(int fd, jigdoData jigdo, templateDescTable table, int workers)
     }
 
     for (i = 0; i < numWorkers; i++) {
-        workerState[i].args.jigdo = &jigdo;
+        workerState[i].args.jigdo = jigdo;
         // XXX sharing fd between threads probably kills kittens
         workerState[i].args.outFd = fd;
     }
 
-    localFiles = findLocalFiles(fd, &table, &jigdo);
+    localFiles = jigdoFindLocalFiles(fd, &table, jigdo);
     if (localFiles > 0) {
         printf("%d files were found locally and do not need to be fetched.\n",
                localFiles);
