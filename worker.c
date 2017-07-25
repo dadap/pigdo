@@ -159,9 +159,12 @@ static templateFileEntry *selectChunk(templateFileEntry *files, int count)
 
     /* Searching for the next available file and assigning it should happen
      * atomically, so don't release tableLock until assigned. */
-    for (i = 0; i < count && !isWaitingFileNoMutex(files + i); i++);
-
-    files[i].status = COMMIT_STATUS_ASSIGNED;
+    for (i = 0; i < count; i++) {
+        if (isWaitingFileNoMutex(files + i)) {
+            files[i].status = COMMIT_STATUS_ASSIGNED;
+            break;
+        }
+    }
 
     if (pthread_mutex_unlock(&tableLock) != 0) {
         return NULL;
