@@ -360,7 +360,7 @@ static void printProgress(int sig)
 /*
  * @brief Kick off worker threads to download files to @p fd
  */
-bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
+bool pfetch(int fd, jigdoData *jigdo, templateDescTable *table, int workers)
 {
     bool ret = false;
     int i, contiguousComplete, completedFiles, localFiles = 0;
@@ -396,22 +396,22 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
         workerState[i].args.outFd = fd;
     }
 
-    localFiles = jigdoFindLocalFiles(fd, &table, jigdo);
+    localFiles = jigdoFindLocalFiles(fd, table, jigdo);
     if (localFiles > 0) {
         printf("%d files were found locally and do not need to be fetched.\n",
                localFiles);
     }
 
-    completedFiles = verifyPartial(fd, &table);
+    completedFiles = verifyPartial(fd, table);
     if (completedFiles < 0) {
         goto done;
     }
 
     contiguousComplete = 0;
-    fileBytes = fileSizeTotal(&table, &fileIncompleteBytes);
+    fileBytes = fileSizeTotal(table, &fileIncompleteBytes);
 
     printf("\nNeed to fetch %d files (%zu kBytes total).\n",
-           table.numFiles - completedFiles - localFiles,
+           table->numFiles - completedFiles - localFiles,
            fileIncompleteBytes / 1024);
 
     /* Make sure that completedFiles != newCompletedFiles when loop starts */
@@ -420,13 +420,13 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
      * after exhaustively searching all mirror possibilities. */
-    while (partsRemain(table.files, table.numFiles, &contiguousComplete) > 0) {
+    while (partsRemain(table->files, table->numFiles, &contiguousComplete) > 0) {
 
         for (i = 0; i < numWorkers; i++) {
             size_t bytes;
             commitStatus status = COMMIT_STATUS_NOT_STARTED;
-            int newCompletedFiles = countCompletedFiles(table.files,
-                                                        table.numFiles,
+            int newCompletedFiles = countCompletedFiles(table->files,
+                                                        table->numFiles,
                                                         &bytes);
 
             /* Only print the file count if it's changed to avoid excessive
@@ -434,7 +434,7 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
             if (completedFiles != newCompletedFiles) {
                 completedFiles = newCompletedFiles;
                 printf("\r%d of %d files (%zu/%zu kB) done",
-                       completedFiles, table.numFiles, bytes / 1024,
+                       completedFiles, table->numFiles, bytes / 1024,
                        fileBytes / 1024);
                 fflush(stdout);
             }
@@ -453,8 +453,8 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
                     }
                 }
 
-                workerState[i].args.chunk = selectChunk(table.files,
-                                                        table.numFiles);
+                workerState[i].args.chunk = selectChunk(table->files,
+                                                        table->numFiles);
 
                 if (!workerState[i].args.chunk) {
                     break;
@@ -474,14 +474,14 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
     fflush(stdout);
 
     fileChecksum = md5Fd(fd);
-    ret = md5Cmp(&fileChecksum, &(table.imageInfo.md5Sum)) == 0;
+    ret = md5Cmp(&fileChecksum, &(table->imageInfo.md5Sum)) == 0;
 
     if (ret) {
         printf(" done!\n");
     } else {
         char expectHex[33], actualHex[33];
 
-        md5SumToString(table.imageInfo.md5Sum, expectHex);
+        md5SumToString(table->imageInfo.md5Sum, expectHex);
         md5SumToString(fileChecksum, actualHex);
 
         printf(" error!\nExpected: %s; got %s\n", expectHex, actualHex);

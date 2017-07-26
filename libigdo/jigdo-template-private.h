@@ -32,6 +32,8 @@ struct _templateImageInfo {
                                  ///< computed during .jigdo generation, when
                                  ///< applicable. Initialized to 0 when using
                                  ///< TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE.
+    /// md5Sum in string format
+    char md5String[MD5SUM_STRING_LENGTH];
 };
 
 /**

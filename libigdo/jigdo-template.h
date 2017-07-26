@@ -56,12 +56,10 @@ typedef enum {
  * @brief Parse a DESC table from a @c .template file
  *
  * @param fp An open <tt>FILE *</tt> handle to a Jigdo @c .template file.
- * @param table A pointer to a @c templateDescTable record where the parsed data
- *              will be stored.
  *
- * @return @c true on success; @c false on error
+ * @return A pointer to a new templateDescTable record on success, NULL on error
  */
-bool freadTemplateDesc(FILE *fp, templateDescTable *table);
+templateDescTable *jigdoReadTemplateFile(FILE *fp);
 
 /**
  * @brief Decompress the data stream from the @c .template and write it out
@@ -71,5 +69,20 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table);
  * @param table Table of file parts from the @c .template DESC table
  */
 bool writeDataFromTemplate(FILE *fp, int outFd, templateDescTable *table);
+
+/**
+ * @brief Get the MD5 checksum of the target file
+ */
+const char *jigdoGetImageMD5(const templateDescTable *table);
+
+/**
+ * @brief Get the size of the target file in bytes
+ */
+uint64_t jigdoGetImageSize(const templateDescTable *table);
+
+/**
+ * @brief set the templateDescTable::existingFile flag
+ */
+void jigdoSetExistingFile(templateDescTable *table, bool val);
 
 #endif

@@ -28,22 +28,10 @@
 #include "libigdo/jigdo.h"
 #include "libigdo/fetch.h"
 #include "libigdo/util.h"
-#include "libigdo/jigdo-template-private.h"
 
 #include "worker.h"
 
 #include "config.h"
-
-/*
- * @brief Comparator function to allow sorting files in reverse size order
- */
-static int fileRevSizeCmp(const void *a, const void *b)
-{
-    const templateFileEntry *fileA = (templateFileEntry *) a;
-    const templateFileEntry *fileB = (templateFileEntry *) b;
-
-    return fileB->size - fileA->size;
-}
 
 /*
  * @brief print a usage message and exit
@@ -78,7 +66,7 @@ int main(int argc, char * const * argv)
 {
     FILE *fp = NULL;
     jigdoData *jigdo;
-    templateDescTable table;
+    templateDescTable *table;
     int ret = 1, fd = -1, i;
     bool resize;
     char *jigdoFile = NULL, *jigdoDir, *templatePath = NULL, *imagePath = NULL;
@@ -87,8 +75,8 @@ int main(int argc, char * const * argv)
     int numMirrors = 0;
     const char *progName = argv[0];
     int numWorkers = defaultNumThreads;
-    char md5Hex[33];
-    const char *imageName = "", *templateName = "";
+    const char *imageName = "", *templateName = "", *md5Hex = "";
+    uint64_t imageSize;
 
     static struct option opts[] = {
         {"mirror",      required_argument, NULL, 'm'},
@@ -167,7 +155,7 @@ int main(int argc, char * const * argv)
         goto done;
     }
 
-    if (!freadTemplateDesc(fp, &table)) {
+    if (!(table = jigdoReadTemplateFile(fp))) {
         fprintf(stderr, "Failed to read the template DESC table.\n");
         goto done;
     }
@@ -179,12 +167,10 @@ int main(int argc, char * const * argv)
         }
     }
 
-    /* Download the largest files first, to maximize the parallelism */
-    qsort(table.files, table.numFiles, sizeof(table.files[0]), fileRevSizeCmp);
+    md5Hex = jigdoGetImageMD5(table);
+    imageSize = jigdoGetImageSize(table);
 
-    md5SumToString(table.imageInfo.md5Sum, md5Hex);
-
-    printf("Image size is: %"PRIu64" bytes\n", table.imageInfo.size);
+    printf("Image size is: %"PRIu64" bytes\n", imageSize);
     printf("Image md5sum is: %s\n", md5Hex);
 
     if (!imagePath) {
@@ -207,22 +193,22 @@ int main(int argc, char * const * argv)
         goto done;
     }
 
-    if (lseek(fd, 0, SEEK_END) < table.imageInfo.size) {
+    if (lseek(fd, 0, SEEK_END) < imageSize) {
 #ifdef HAVE_POSIX_FALLOCATE
-        resize = (posix_fallocate(fd, 0, table.imageInfo.size) == 0);
+        resize = (posix_fallocate(fd, 0, imageSize) == 0);
 #else
         /* Poor man's fallocate(2); much slower than the real thing */
-        resize = (pwrite(fd, "\0", 1, table.imageInfo.size - 1) == 1);
+        resize = (pwrite(fd, "\0", 1, imageSize - 1) == 1);
 #endif
         if (!resize) {
             fprintf(stderr, "Failed to allocate disk space for image file\n");
             goto done;
         }
     } else {
-        table.existingFile = true;
+        jigdoSetExistingFile(table, true);
     }
 
-    if (!writeDataFromTemplate(fp, fd, &table)) {
+    if (!writeDataFromTemplate(fp, fd, table)) {
         goto done;
     }
 

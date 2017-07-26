@@ -61,7 +61,18 @@ static uint64_t templateU48ToU64(templateU48 i)
     return readLittleEndianValue(i.bytes, sizeof(i.bytes));
 }
 
-bool freadTemplateDesc(FILE *fp, templateDescTable *table)
+/*
+ * @brief Comparator function to allow sorting files in reverse size order
+ */
+static int fileRevSizeCmp(const void *a, const void *b)
+{
+    const templateFileEntry *fileA = (templateFileEntry *) a;
+    const templateFileEntry *fileB = (templateFileEntry *) b;
+
+    return fileB->size - fileA->size;
+}
+
+templateDescTable *jigdoReadTemplateFile(FILE *fp)
 {
     static const char descHeader[] = { 'D', 'E', 'S', 'C' };
     char descHeaderVerify[sizeof(descHeader)];
@@ -69,17 +80,22 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
     uint64_t size;
     off_t offset = 0;
     int i;
+    templateDescTable *table;
 
-    memset(table, 0, sizeof(*table));
+    table = calloc(1, sizeof(*table));
+
+    if (!table) {
+        goto failed;
+    }
 
     /* The last six bytes of the .template are the size of the DESC table */
 
     if (fseek(fp, -1 * sizeof(sizeRead), SEEK_END) != 0) {
-        return false;
+        goto failed;
     }
 
     if (fread(&sizeRead, sizeof(sizeRead), 1, fp) != 1) {
-        return false;
+        goto failed;
     }
 
     size = templateU48ToU64(sizeRead);
@@ -87,23 +103,23 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
     /* Seek to the beginning of the DESC table and perform some validation */
 
     if (fseek(fp, -1 * size, SEEK_END) != 0) {
-        return false;
+        goto failed;
     }
 
     if (fread(&descHeaderVerify, sizeof(descHeaderVerify), 1, fp) != 1) {
-        return false;
+        goto failed;
     }
 
     if (memcmp(descHeader, descHeaderVerify, sizeof(descHeader)) != 0) {
-        return false;
+        goto failed;
     }
 
     if (fread(&sizeRead, sizeof(sizeRead), 1, fp) != 1) {
-        return false;
+        goto failed;
     }
 
     if (size != templateU48ToU64(sizeRead)) {
-        return false;
+        goto failed;
     }
 
     /* From now on, we will use size as a running countdown to EOF */
@@ -118,12 +134,12 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
          * and the next six bytes are the size. */
 
         if(fread(&type, sizeof(type), 1, fp) != 1) {
-            return false;
+            goto failed;
         }
         size -= sizeof(type);
 
         if(fread(&sizeRead, sizeof(sizeRead), 1, fp) != 1) {
-            return false;
+            goto failed;
         }
 
         size -= sizeof(sizeRead);
@@ -138,13 +154,13 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
             case TEMPLATE_ENTRY_TYPE_IMAGE_INFO:
 
                 if (fread(&md5Sum, sizeof(md5Sum), 1, fp) != 1) {
-                    return false;
+                    goto failed;
                 }
                 size -= sizeof(md5Sum);
 
                 if (type == TEMPLATE_ENTRY_TYPE_IMAGE_INFO) {
                     if (fread(&blockLen, sizeof(blockLen), 1, fp) != 1) {
-                        return false;
+                        goto failed;
                     }
                     size -= sizeof(blockLen);
                 }
@@ -153,6 +169,7 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
                 table->imageInfo.md5Sum = md5Sum;
                 table->imageInfo.rsync64SumBlockLen =
                     readLittleEndianValue(&blockLen, sizeof(blockLen));
+                md5SumToString(md5Sum, table->imageInfo.md5String);
 
                 break;
 
@@ -163,7 +180,7 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
                                             (table->numDataBlocks + 1));
 
                 if (!table->dataBlocks) {
-                    return false;
+                    goto failed;
                 }
 
                 memset(table->dataBlocks + table->numDataBlocks, 0,
@@ -182,13 +199,13 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
 
                 if (type == TEMPLATE_ENTRY_TYPE_FILE) {
                     if (fread(&rsync64Sum, sizeof(rsync64Sum), 1, fp) != 1) {
-                        return false;
+                        goto failed;
                     }
                     size -= sizeof(rsync64Sum);
                 }
 
                 if (fread(&md5Sum, sizeof(md5Sum), 1, fp) != 1) {
-                    return false;
+                    goto failed;
                 }
                 size -= sizeof(md5Sum);
 
@@ -197,7 +214,7 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
                                        (table->numFiles + 1));
 
                 if (!table->files) {
-                    return false;
+                    goto failed;
                 }
 
                 memset(table->files + table->numFiles, 0,
@@ -218,12 +235,20 @@ bool freadTemplateDesc(FILE *fp, templateDescTable *table)
 
             default:
 
-                return false;
+                goto failed;
         }
 
     }
 
-    return true;
+    /* Download the largest files first, to maximize the parallelism */
+    qsort(table->files, table->numFiles, sizeof(table->files[0]),
+          fileRevSizeCmp);
+
+    return table;
+
+failed:
+    free(table);
+    return NULL;
 }
 
 /**
@@ -441,4 +466,19 @@ done:
     free(decompressed);
 
     return ret;
+}
+
+const char *jigdoGetImageMD5(const templateDescTable *table)
+{
+    return table->imageInfo.md5String;
+}
+
+uint64_t jigdoGetImageSize(const templateDescTable *table)
+{
+    return table->imageInfo.size;
+}
+
+void jigdoSetExistingFile(templateDescTable *table, bool val)
+{
+    table->existingFile = val;
 }
