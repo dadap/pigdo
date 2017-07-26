@@ -363,7 +363,7 @@ static void printProgress(int sig)
 bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
 {
     bool ret = false;
-    int i, contiguousComplete, completedFiles = 0, localFiles = 0;
+    int i, contiguousComplete, completedFiles, localFiles = 0;
     size_t fileBytes, fileIncompleteBytes;
     md5Checksum fileChecksum;
 
@@ -413,6 +413,9 @@ bool pfetch(int fd, jigdoData *jigdo, templateDescTable table, int workers)
     printf("\nNeed to fetch %d files (%zu kBytes total).\n",
            table.numFiles - completedFiles - localFiles,
            fileIncompleteBytes / 1024);
+
+    /* Make sure that completedFiles != newCompletedFiles when loop starts */
+    completedFiles = -1;
 
     /* XXX this will hang if more files error out than there are threads, and
      * do not succeed upon retry. Should implement max retries limit, perhaps
