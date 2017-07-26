@@ -15,6 +15,8 @@
  * this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
+
 #include <sys/mman.h>
 #include <signal.h>
 #include <pthread.h>

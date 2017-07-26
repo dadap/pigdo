@@ -7,6 +7,9 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AM_PROG_AR
 
+dnl > 2GiB file support on 32-bit platforms
+AC_SYS_LARGEFILE
+
 dnl Check for libraries:
 AC_CHECK_LIB([z], [inflate])
 AC_CHECK_LIB([bz2], [BZ2_bzDecompress])

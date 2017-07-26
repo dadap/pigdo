@@ -17,6 +17,8 @@
 
 #define _XOPEN_SOURCE 700 // for getline(3) and realpath(3)
 
+#include "config.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>

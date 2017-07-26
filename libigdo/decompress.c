@@ -15,6 +15,8 @@
  * this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
+
 #include <string.h>
 #include <zlib.h>
 #include <bzlib.h>
@@ -22,7 +24,6 @@
 #include <unistd.h>
 
 #include "decompress.h"
-#include "config.h"
 
 /**
  * @brief Decompress a bzip2 stream

@@ -15,6 +15,8 @@
  * this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -30,8 +32,6 @@
 #include "libigdo/util.h"
 
 #include "worker.h"
-
-#include "config.h"
 
 /*
  * @brief print a usage message and exit
