@@ -63,7 +63,9 @@ The install step is optional: the pigdo executable may be run directly from the
 source directory once it is built.
 
 Note that the ./configure script is not checked into the git repository; the
-standard autotools workflow for regenerating ./configure is needed.
+standard autotools workflow for regenerating ./configure is needed, e.g.
+`autoreconf -i` before `./configure` (make sure you have the macros from the
+Autoconf Archive installed).
 
 Usage
 -----
@@ -89,9 +91,9 @@ source directory.
 Copying
 -------
 
-You are free to use, study, and redistribute pigdo under the terms of version 2
-of the GNU General Public License. See the "COPYING" file for the full text of
-the GPLv2.
+You are free to use, study, modify, and redistribute pigdo under the terms of
+version 2 of the GNU General Public License. See the "COPYING" file for the full
+text of the GPLv2.
 
 TODO
 ----
@@ -110,3 +112,7 @@ Missing features include, but are not limited to:
 * Some fields that are part of the .jigdo file format are ignored.
 * Pigdo is intended to allow caching downloaded files locally, in addition to
   assembling them directly into the target output file.
+* Pigdo was originally conceived as a standalone program, but much of its
+  functionality is in the process of being split out into a library called
+  libigdo, which will hopefully eventually export a sensible API for assembling
+  files from .jigdo and .template files.
