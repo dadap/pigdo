@@ -18,10 +18,15 @@
 #include "config.h"
 
 #include <string.h>
-#include <zlib.h>
-#include <bzlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+
+#if defined HAVE_LIBZ
+#include <zlib.h>
+#endif
+#if defined HAVE_LIBBZ2
+#include <bzlib.h>
+#endif
 
 #include "decompress.h"
 
