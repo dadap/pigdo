@@ -149,8 +149,8 @@ templateDescTable *jigdoReadTemplateFile(FILE *fp)
 
         switch (type) {
             md5Checksum md5Sum;
-            uint32_t blockLen = 0;
-            uint64_t rsync64Sum = 0;
+            uint32_t blockLen;
+            uint64_t rsync64Sum;
 
             case TEMPLATE_ENTRY_TYPE_IMAGE_INFO_OBSOLETE:
             case TEMPLATE_ENTRY_TYPE_IMAGE_INFO:

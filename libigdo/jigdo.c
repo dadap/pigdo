@@ -441,6 +441,7 @@ bool addServerMirror(jigdoData *data, char *servermirror)
     int i;
     jigdoServer *s;
     char *c, *serverName, *mirror;
+    const char *prefix = "";
 
     // XXX nuke args like --try-last until quoting support is added
     c = strchr(servermirror, ' ');
@@ -463,7 +464,6 @@ bool addServerMirror(jigdoData *data, char *servermirror)
     }
 
     switch (isURI(mirror)) {
-        const char *prefix = "";
         char *path;
         size_t len;
 
