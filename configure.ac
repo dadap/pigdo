@@ -10,6 +10,11 @@ AM_PROG_AR
 dnl > 2GiB file support on 32-bit platforms
 AC_SYS_LARGEFILE
 
+dnl Always search /usr/local, for systems where dependency libraries may be
+dnl located there by default (e.g. BSDs, where curl is not in the base system)
+CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+LDFLAGS="$LDFLAGS -L/usr/local/lib"
+
 dnl Check for libraries:
 AC_CHECK_LIB([z], [inflate])
 AC_CHECK_LIB([bz2], [BZ2_bzDecompress])
